@@ -2,9 +2,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: api/proto/agent/v1/agent.proto
+// source: pkg/agentpb/v1/agent.proto
 
-package agentv1
+package agentpbv1
 
 import (
 	context "context"
@@ -501,5 +501,5 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "api/proto/agent/v1/agent.proto",
+	Metadata: "pkg/agentpb/v1/agent.proto",
 }

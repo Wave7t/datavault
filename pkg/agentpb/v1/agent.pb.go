@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: api/proto/agent/v1/agent.proto
+// source: pkg/agentpb/v1/agent.proto
 
-package agentv1
+package agentpbv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -33,7 +33,7 @@ type Rule struct {
 
 func (x *Rule) Reset() {
 	*x = Rule{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[0]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45,7 +45,7 @@ func (x *Rule) String() string {
 func (*Rule) ProtoMessage() {}
 
 func (x *Rule) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[0]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,7 +58,7 @@ func (x *Rule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Rule.ProtoReflect.Descriptor instead.
 func (*Rule) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{0}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Rule) GetName() string {
@@ -100,7 +100,7 @@ type AddUserRuleRequest struct {
 
 func (x *AddUserRuleRequest) Reset() {
 	*x = AddUserRuleRequest{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[1]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -112,7 +112,7 @@ func (x *AddUserRuleRequest) String() string {
 func (*AddUserRuleRequest) ProtoMessage() {}
 
 func (x *AddUserRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[1]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -125,7 +125,7 @@ func (x *AddUserRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddUserRuleRequest.ProtoReflect.Descriptor instead.
 func (*AddUserRuleRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{1}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *AddUserRuleRequest) GetName() string {
@@ -157,7 +157,7 @@ type AddUserRuleResponse struct {
 
 func (x *AddUserRuleResponse) Reset() {
 	*x = AddUserRuleResponse{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[2]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -169,7 +169,7 @@ func (x *AddUserRuleResponse) String() string {
 func (*AddUserRuleResponse) ProtoMessage() {}
 
 func (x *AddUserRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[2]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -182,7 +182,7 @@ func (x *AddUserRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddUserRuleResponse.ProtoReflect.Descriptor instead.
 func (*AddUserRuleResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{2}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{2}
 }
 
 type RemoveUserRuleRequest struct {
@@ -194,7 +194,7 @@ type RemoveUserRuleRequest struct {
 
 func (x *RemoveUserRuleRequest) Reset() {
 	*x = RemoveUserRuleRequest{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[3]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -206,7 +206,7 @@ func (x *RemoveUserRuleRequest) String() string {
 func (*RemoveUserRuleRequest) ProtoMessage() {}
 
 func (x *RemoveUserRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[3]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -219,7 +219,7 @@ func (x *RemoveUserRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveUserRuleRequest.ProtoReflect.Descriptor instead.
 func (*RemoveUserRuleRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{3}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RemoveUserRuleRequest) GetName() string {
@@ -237,7 +237,7 @@ type RemoveUserRuleResponse struct {
 
 func (x *RemoveUserRuleResponse) Reset() {
 	*x = RemoveUserRuleResponse{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[4]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -249,7 +249,7 @@ func (x *RemoveUserRuleResponse) String() string {
 func (*RemoveUserRuleResponse) ProtoMessage() {}
 
 func (x *RemoveUserRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[4]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -262,7 +262,7 @@ func (x *RemoveUserRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveUserRuleResponse.ProtoReflect.Descriptor instead.
 func (*RemoveUserRuleResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{4}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{4}
 }
 
 type ListUserRulesRequest struct {
@@ -273,7 +273,7 @@ type ListUserRulesRequest struct {
 
 func (x *ListUserRulesRequest) Reset() {
 	*x = ListUserRulesRequest{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[5]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -285,7 +285,7 @@ func (x *ListUserRulesRequest) String() string {
 func (*ListUserRulesRequest) ProtoMessage() {}
 
 func (x *ListUserRulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[5]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -298,7 +298,7 @@ func (x *ListUserRulesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUserRulesRequest.ProtoReflect.Descriptor instead.
 func (*ListUserRulesRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{5}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{5}
 }
 
 type ListUserRulesResponse struct {
@@ -310,7 +310,7 @@ type ListUserRulesResponse struct {
 
 func (x *ListUserRulesResponse) Reset() {
 	*x = ListUserRulesResponse{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[6]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -322,7 +322,7 @@ func (x *ListUserRulesResponse) String() string {
 func (*ListUserRulesResponse) ProtoMessage() {}
 
 func (x *ListUserRulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[6]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -335,7 +335,7 @@ func (x *ListUserRulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUserRulesResponse.ProtoReflect.Descriptor instead.
 func (*ListUserRulesResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{6}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListUserRulesResponse) GetRules() []*Rule {
@@ -354,7 +354,7 @@ type EnableUserRuleRequest struct {
 
 func (x *EnableUserRuleRequest) Reset() {
 	*x = EnableUserRuleRequest{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[7]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -366,7 +366,7 @@ func (x *EnableUserRuleRequest) String() string {
 func (*EnableUserRuleRequest) ProtoMessage() {}
 
 func (x *EnableUserRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[7]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -379,7 +379,7 @@ func (x *EnableUserRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnableUserRuleRequest.ProtoReflect.Descriptor instead.
 func (*EnableUserRuleRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{7}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *EnableUserRuleRequest) GetName() string {
@@ -397,7 +397,7 @@ type EnableUserRuleResponse struct {
 
 func (x *EnableUserRuleResponse) Reset() {
 	*x = EnableUserRuleResponse{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[8]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -409,7 +409,7 @@ func (x *EnableUserRuleResponse) String() string {
 func (*EnableUserRuleResponse) ProtoMessage() {}
 
 func (x *EnableUserRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[8]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -422,7 +422,7 @@ func (x *EnableUserRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnableUserRuleResponse.ProtoReflect.Descriptor instead.
 func (*EnableUserRuleResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{8}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{8}
 }
 
 type DisableUserRuleRequest struct {
@@ -434,7 +434,7 @@ type DisableUserRuleRequest struct {
 
 func (x *DisableUserRuleRequest) Reset() {
 	*x = DisableUserRuleRequest{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[9]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -446,7 +446,7 @@ func (x *DisableUserRuleRequest) String() string {
 func (*DisableUserRuleRequest) ProtoMessage() {}
 
 func (x *DisableUserRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[9]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -459,7 +459,7 @@ func (x *DisableUserRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisableUserRuleRequest.ProtoReflect.Descriptor instead.
 func (*DisableUserRuleRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{9}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DisableUserRuleRequest) GetName() string {
@@ -477,7 +477,7 @@ type DisableUserRuleResponse struct {
 
 func (x *DisableUserRuleResponse) Reset() {
 	*x = DisableUserRuleResponse{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[10]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -489,7 +489,7 @@ func (x *DisableUserRuleResponse) String() string {
 func (*DisableUserRuleResponse) ProtoMessage() {}
 
 func (x *DisableUserRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[10]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -502,7 +502,7 @@ func (x *DisableUserRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisableUserRuleResponse.ProtoReflect.Descriptor instead.
 func (*DisableUserRuleResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{10}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{10}
 }
 
 type AddMachineRuleRequest struct {
@@ -517,7 +517,7 @@ type AddMachineRuleRequest struct {
 
 func (x *AddMachineRuleRequest) Reset() {
 	*x = AddMachineRuleRequest{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -529,7 +529,7 @@ func (x *AddMachineRuleRequest) String() string {
 func (*AddMachineRuleRequest) ProtoMessage() {}
 
 func (x *AddMachineRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -542,7 +542,7 @@ func (x *AddMachineRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddMachineRuleRequest.ProtoReflect.Descriptor instead.
 func (*AddMachineRuleRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{11}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AddMachineRuleRequest) GetName() string {
@@ -581,7 +581,7 @@ type AddMachineRuleResponse struct {
 
 func (x *AddMachineRuleResponse) Reset() {
 	*x = AddMachineRuleResponse{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -593,7 +593,7 @@ func (x *AddMachineRuleResponse) String() string {
 func (*AddMachineRuleResponse) ProtoMessage() {}
 
 func (x *AddMachineRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -606,7 +606,7 @@ func (x *AddMachineRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddMachineRuleResponse.ProtoReflect.Descriptor instead.
 func (*AddMachineRuleResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{12}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{12}
 }
 
 type RemoveMachineRuleRequest struct {
@@ -618,7 +618,7 @@ type RemoveMachineRuleRequest struct {
 
 func (x *RemoveMachineRuleRequest) Reset() {
 	*x = RemoveMachineRuleRequest{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -630,7 +630,7 @@ func (x *RemoveMachineRuleRequest) String() string {
 func (*RemoveMachineRuleRequest) ProtoMessage() {}
 
 func (x *RemoveMachineRuleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -643,7 +643,7 @@ func (x *RemoveMachineRuleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMachineRuleRequest.ProtoReflect.Descriptor instead.
 func (*RemoveMachineRuleRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{13}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RemoveMachineRuleRequest) GetName() string {
@@ -661,7 +661,7 @@ type RemoveMachineRuleResponse struct {
 
 func (x *RemoveMachineRuleResponse) Reset() {
 	*x = RemoveMachineRuleResponse{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -673,7 +673,7 @@ func (x *RemoveMachineRuleResponse) String() string {
 func (*RemoveMachineRuleResponse) ProtoMessage() {}
 
 func (x *RemoveMachineRuleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -686,7 +686,7 @@ func (x *RemoveMachineRuleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMachineRuleResponse.ProtoReflect.Descriptor instead.
 func (*RemoveMachineRuleResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{14}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{14}
 }
 
 type ListMachineRulesRequest struct {
@@ -697,7 +697,7 @@ type ListMachineRulesRequest struct {
 
 func (x *ListMachineRulesRequest) Reset() {
 	*x = ListMachineRulesRequest{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -709,7 +709,7 @@ func (x *ListMachineRulesRequest) String() string {
 func (*ListMachineRulesRequest) ProtoMessage() {}
 
 func (x *ListMachineRulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -722,7 +722,7 @@ func (x *ListMachineRulesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMachineRulesRequest.ProtoReflect.Descriptor instead.
 func (*ListMachineRulesRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{15}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{15}
 }
 
 type ListMachineRulesResponse struct {
@@ -734,7 +734,7 @@ type ListMachineRulesResponse struct {
 
 func (x *ListMachineRulesResponse) Reset() {
 	*x = ListMachineRulesResponse{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -746,7 +746,7 @@ func (x *ListMachineRulesResponse) String() string {
 func (*ListMachineRulesResponse) ProtoMessage() {}
 
 func (x *ListMachineRulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -759,7 +759,7 @@ func (x *ListMachineRulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMachineRulesResponse.ProtoReflect.Descriptor instead.
 func (*ListMachineRulesResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{16}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListMachineRulesResponse) GetRules() []*Rule {
@@ -778,7 +778,7 @@ type TriggerSyncRequest struct {
 
 func (x *TriggerSyncRequest) Reset() {
 	*x = TriggerSyncRequest{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -790,7 +790,7 @@ func (x *TriggerSyncRequest) String() string {
 func (*TriggerSyncRequest) ProtoMessage() {}
 
 func (x *TriggerSyncRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -803,7 +803,7 @@ func (x *TriggerSyncRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerSyncRequest.ProtoReflect.Descriptor instead.
 func (*TriggerSyncRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{17}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *TriggerSyncRequest) GetRuleName() string {
@@ -822,7 +822,7 @@ type TriggerSyncResponse struct {
 
 func (x *TriggerSyncResponse) Reset() {
 	*x = TriggerSyncResponse{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -834,7 +834,7 @@ func (x *TriggerSyncResponse) String() string {
 func (*TriggerSyncResponse) ProtoMessage() {}
 
 func (x *TriggerSyncResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -847,7 +847,7 @@ func (x *TriggerSyncResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerSyncResponse.ProtoReflect.Descriptor instead.
 func (*TriggerSyncResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{18}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TriggerSyncResponse) GetTaskId() string {
@@ -866,7 +866,7 @@ type GetSyncStatusRequest struct {
 
 func (x *GetSyncStatusRequest) Reset() {
 	*x = GetSyncStatusRequest{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -878,7 +878,7 @@ func (x *GetSyncStatusRequest) String() string {
 func (*GetSyncStatusRequest) ProtoMessage() {}
 
 func (x *GetSyncStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -891,7 +891,7 @@ func (x *GetSyncStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSyncStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetSyncStatusRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{19}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetSyncStatusRequest) GetTaskId() string {
@@ -915,7 +915,7 @@ type SyncStatusUpdate struct {
 
 func (x *SyncStatusUpdate) Reset() {
 	*x = SyncStatusUpdate{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[20]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -927,7 +927,7 @@ func (x *SyncStatusUpdate) String() string {
 func (*SyncStatusUpdate) ProtoMessage() {}
 
 func (x *SyncStatusUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[20]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -940,7 +940,7 @@ func (x *SyncStatusUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncStatusUpdate.ProtoReflect.Descriptor instead.
 func (*SyncStatusUpdate) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{20}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SyncStatusUpdate) GetTaskId() string {
@@ -999,7 +999,7 @@ type SyncStats struct {
 
 func (x *SyncStats) Reset() {
 	*x = SyncStats{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[21]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1011,7 +1011,7 @@ func (x *SyncStats) String() string {
 func (*SyncStats) ProtoMessage() {}
 
 func (x *SyncStats) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[21]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1024,7 +1024,7 @@ func (x *SyncStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncStats.ProtoReflect.Descriptor instead.
 func (*SyncStats) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{21}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SyncStats) GetTotalFiles() int64 {
@@ -1078,7 +1078,7 @@ type RequestRestoreRequest struct {
 
 func (x *RequestRestoreRequest) Reset() {
 	*x = RequestRestoreRequest{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[22]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1090,7 +1090,7 @@ func (x *RequestRestoreRequest) String() string {
 func (*RequestRestoreRequest) ProtoMessage() {}
 
 func (x *RequestRestoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[22]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1103,7 +1103,7 @@ func (x *RequestRestoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestRestoreRequest.ProtoReflect.Descriptor instead.
 func (*RequestRestoreRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{22}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RequestRestoreRequest) GetTargetPath() string {
@@ -1122,7 +1122,7 @@ type RequestRestoreResponse struct {
 
 func (x *RequestRestoreResponse) Reset() {
 	*x = RequestRestoreResponse{}
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[23]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1134,7 +1134,7 @@ func (x *RequestRestoreResponse) String() string {
 func (*RequestRestoreResponse) ProtoMessage() {}
 
 func (x *RequestRestoreResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_agent_v1_agent_proto_msgTypes[23]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1147,7 +1147,7 @@ func (x *RequestRestoreResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestRestoreResponse.ProtoReflect.Descriptor instead.
 func (*RequestRestoreResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_agent_v1_agent_proto_rawDescGZIP(), []int{23}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RequestRestoreResponse) GetTaskId() string {
@@ -1157,11 +1157,11 @@ func (x *RequestRestoreResponse) GetTaskId() string {
 	return ""
 }
 
-var File_api_proto_agent_v1_agent_proto protoreflect.FileDescriptor
+var File_pkg_agentpb_v1_agent_proto protoreflect.FileDescriptor
 
-const file_api_proto_agent_v1_agent_proto_rawDesc = "" +
+const file_pkg_agentpb_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	"\x1eapi/proto/agent/v1/agent.proto\x12\bagent.v1\"d\n" +
+	"\x1apkg/agentpb/v1/agent.proto\x12\bagent.v1\"d\n" +
 	"\x04Rule\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05paths\x18\x02 \x03(\tR\x05paths\x12\x18\n" +
@@ -1233,24 +1233,22 @@ const file_api_proto_agent_v1_agent_proto_rawDesc = "" +
 	"\x10ListMachineRules\x12!.agent.v1.ListMachineRulesRequest\x1a\".agent.v1.ListMachineRulesResponse\x12J\n" +
 	"\vTriggerSync\x12\x1c.agent.v1.TriggerSyncRequest\x1a\x1d.agent.v1.TriggerSyncResponse\x12M\n" +
 	"\rGetSyncStatus\x12\x1e.agent.v1.GetSyncStatusRequest\x1a\x1a.agent.v1.SyncStatusUpdate0\x01\x12S\n" +
-	"\x0eRequestRestore\x12\x1f.agent.v1.RequestRestoreRequest\x1a .agent.v1.RequestRestoreResponseB\x98\x01\n" +
-	"\fcom.agent.v1B\n" +
-	"AgentProtoP\x01Z;github.com/example/datavault/pkg/api/proto/agent/v1;agentv1\xa2\x02\x03AXX\xaa\x02\bAgent.V1\xca\x02\bAgent\\V1\xe2\x02\x14Agent\\V1\\GPBMetadata\xea\x02\tAgent::V1b\x06proto3"
+	"\x0eRequestRestore\x12\x1f.agent.v1.RequestRestoreRequest\x1a .agent.v1.RequestRestoreResponseB7Z5github.com/example/datavault/pkg/agentpb/v1;agentpbv1b\x06proto3"
 
 var (
-	file_api_proto_agent_v1_agent_proto_rawDescOnce sync.Once
-	file_api_proto_agent_v1_agent_proto_rawDescData []byte
+	file_pkg_agentpb_v1_agent_proto_rawDescOnce sync.Once
+	file_pkg_agentpb_v1_agent_proto_rawDescData []byte
 )
 
-func file_api_proto_agent_v1_agent_proto_rawDescGZIP() []byte {
-	file_api_proto_agent_v1_agent_proto_rawDescOnce.Do(func() {
-		file_api_proto_agent_v1_agent_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_api_proto_agent_v1_agent_proto_rawDesc), len(file_api_proto_agent_v1_agent_proto_rawDesc)))
+func file_pkg_agentpb_v1_agent_proto_rawDescGZIP() []byte {
+	file_pkg_agentpb_v1_agent_proto_rawDescOnce.Do(func() {
+		file_pkg_agentpb_v1_agent_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_pkg_agentpb_v1_agent_proto_rawDesc), len(file_pkg_agentpb_v1_agent_proto_rawDesc)))
 	})
-	return file_api_proto_agent_v1_agent_proto_rawDescData
+	return file_pkg_agentpb_v1_agent_proto_rawDescData
 }
 
-var file_api_proto_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
-var file_api_proto_agent_v1_agent_proto_goTypes = []any{
+var file_pkg_agentpb_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_pkg_agentpb_v1_agent_proto_goTypes = []any{
 	(*Rule)(nil),                      // 0: agent.v1.Rule
 	(*AddUserRuleRequest)(nil),        // 1: agent.v1.AddUserRuleRequest
 	(*AddUserRuleResponse)(nil),       // 2: agent.v1.AddUserRuleResponse
@@ -1276,7 +1274,7 @@ var file_api_proto_agent_v1_agent_proto_goTypes = []any{
 	(*RequestRestoreRequest)(nil),     // 22: agent.v1.RequestRestoreRequest
 	(*RequestRestoreResponse)(nil),    // 23: agent.v1.RequestRestoreResponse
 }
-var file_api_proto_agent_v1_agent_proto_depIdxs = []int32{
+var file_pkg_agentpb_v1_agent_proto_depIdxs = []int32{
 	0,  // 0: agent.v1.ListUserRulesResponse.rules:type_name -> agent.v1.Rule
 	0,  // 1: agent.v1.ListMachineRulesResponse.rules:type_name -> agent.v1.Rule
 	21, // 2: agent.v1.SyncStatusUpdate.stats:type_name -> agent.v1.SyncStats
@@ -1309,26 +1307,26 @@ var file_api_proto_agent_v1_agent_proto_depIdxs = []int32{
 	0,  // [0:3] is the sub-list for field type_name
 }
 
-func init() { file_api_proto_agent_v1_agent_proto_init() }
-func file_api_proto_agent_v1_agent_proto_init() {
-	if File_api_proto_agent_v1_agent_proto != nil {
+func init() { file_pkg_agentpb_v1_agent_proto_init() }
+func file_pkg_agentpb_v1_agent_proto_init() {
+	if File_pkg_agentpb_v1_agent_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_agent_v1_agent_proto_rawDesc), len(file_api_proto_agent_v1_agent_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_agentpb_v1_agent_proto_rawDesc), len(file_pkg_agentpb_v1_agent_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_api_proto_agent_v1_agent_proto_goTypes,
-		DependencyIndexes: file_api_proto_agent_v1_agent_proto_depIdxs,
-		MessageInfos:      file_api_proto_agent_v1_agent_proto_msgTypes,
+		GoTypes:           file_pkg_agentpb_v1_agent_proto_goTypes,
+		DependencyIndexes: file_pkg_agentpb_v1_agent_proto_depIdxs,
+		MessageInfos:      file_pkg_agentpb_v1_agent_proto_msgTypes,
 	}.Build()
-	File_api_proto_agent_v1_agent_proto = out.File
-	file_api_proto_agent_v1_agent_proto_goTypes = nil
-	file_api_proto_agent_v1_agent_proto_depIdxs = nil
+	File_pkg_agentpb_v1_agent_proto = out.File
+	file_pkg_agentpb_v1_agent_proto_goTypes = nil
+	file_pkg_agentpb_v1_agent_proto_depIdxs = nil
 }
