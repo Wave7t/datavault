@@ -1,0 +1,20 @@
+[Unit]
+Description=datavault Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/datavault-agent --config /etc/datavault/agent/config.yaml
+Restart=always
+RestartSec=30
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/datavault/agent /etc/datavault/agent/user-rules /var/run
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

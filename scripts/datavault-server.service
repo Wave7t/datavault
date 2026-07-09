@@ -1,0 +1,17 @@
+[Unit]
+Description=datavault Server
+After=network-online.target zfs.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/datavault-server --config /etc/datavault/server/config.yaml
+Restart=always
+RestartSec=10
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/datavault/server
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
