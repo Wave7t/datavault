@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package backup.v1;
+
+option go_package = "github.com/example/datavault/pkg/backuppb/v1;backuppbv1";
+
+service BackupService {
+  rpc GetChallenge(GetChallengeRequest) returns (Challenge);
+  rpc GetGlobalConfig(GetGlobalConfigRequest) returns (GlobalConfig);
+  rpc PushBackup(stream BackupBatch) returns (stream BatchAck);
+  rpc GetQuotaUsage(GetQuotaUsageRequest) returns (QuotaUsage);
+  rpc PullRestore(PullRestoreRequest) returns (stream RestoreBatch);
+}
+
+message GetChallengeRequest {}
+message Challenge {
+  bytes nonce = 1;
+  int64 expires_at = 2;  // unix timestamp, now+5min
+}
+
+message GetGlobalConfigRequest {
+  string hostname = 1;
+}
+message GlobalConfig {
+  repeated GlobalRule global_rules = 1;
+  UserPolicy user_policy = 2;
+}
+
+message GlobalRule {
+  string name = 1;
+  repeated string paths = 2;
+  repeated string exclude = 3;
+}
+
+message UserPolicy {
+  string default_schedule = 1;
+  int64 default_quota_gb = 2;
+  map<string, UserOverride> per_user_overrides = 3;
+}
+
+message UserOverride {
+  int64 quota_gb = 1;
+  string schedule = 2;  // optional override; empty means use default
+}
+
+message BackupBatch {
+  string batch_id = 1;
+  string username = 2;         // which user this batch belongs to
+  string rule_type = 3;        // "user" or "machine"
+  repeated FileEntry files = 4;
+  bytes signature = 5;         // SSH signature: nonce || "PushBackup" || sha256(payload)
+  bytes nonce = 6;
+}
+
+message FileEntry {
+  string path = 1;             // relative path within the backup root
+  bytes content = 2;           // file contents
+  uint32 mode = 3;             // file mode bits
+  bool deleted = 4;            // true = file was deleted, remove on server
+}
+
+message BatchAck {
+  string batch_id = 1;
+  string status = 2;           // "OK" or "ERROR"
+  string error = 3;            // error detail if status == "ERROR"
+  int64 written_bytes = 4;
+}
+
+message GetQuotaUsageRequest {
+  string username = 1;
+}
+message QuotaUsage {
+  int64 used_bytes = 1;
+  int64 quota_bytes = 2;
+  string dataset = 3;
+}
+
+message PullRestoreRequest {
+  string username = 1;
+  bytes nonce = 2;
+  bytes signature = 3;         // SSH signature: nonce || "PullRestore" || sha256(payload)
+}
+message RestoreBatch {
+  string batch_id = 1;
+  repeated FileEntry files = 2;
+  bool is_last = 3;
+}
