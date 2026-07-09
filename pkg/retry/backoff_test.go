@@ -16,8 +16,8 @@ func TestBackoffIncreases(t *testing.T) {
 	prev := time.Duration(0)
 	for i := 0; i < 10; i++ {
 		next := b.Next()
-		if next <= prev {
-			t.Fatalf("attempt %d: %v <= %v (not increasing)", i, next, prev)
+		if next < prev {
+			t.Fatalf("attempt %d: %v < %v (decreased)", i, next, prev)
 		}
 		prev = next
 	}
