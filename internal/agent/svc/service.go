@@ -24,6 +24,7 @@ type AgentService struct {
 	Cfg           *config.AgentConfig
 	DB            *sql.DB
 	UserRuleStore *rules.UserRuleStore
+	ConfigPath    string // path to agent config file for saveAgentConfig
 
 	// TriggerSyncFn is called to start a sync for a given user and rule.
 	// An empty ruleName means "all rules". Returns a task ID.

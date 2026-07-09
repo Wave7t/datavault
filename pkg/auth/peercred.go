@@ -3,11 +3,29 @@
 package auth
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os/user"
 	"syscall"
 )
+
+// peercredCtxKey is the context key for storing the peer UID.
+type peercredCtxKey struct{}
+
+// ContextWithPeerUID stores the peer UID in the context.
+func ContextWithPeerUID(ctx context.Context, uid uint32) context.Context {
+	return context.WithValue(ctx, peercredCtxKey{}, uid)
+}
+
+// GetPeerUIDFromContext extracts the peer UID from context.
+func GetPeerUIDFromContext(ctx context.Context) (uint32, error) {
+	uid, ok := ctx.Value(peercredCtxKey{}).(uint32)
+	if !ok {
+		return 0, fmt.Errorf("peer UID not found in context")
+	}
+	return uid, nil
+}
 
 // GetPeerUID extracts the Unix socket peer's UID via SO_PEERCRED.
 func GetPeerUID(conn net.Conn) (uint32, error) {
