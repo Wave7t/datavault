@@ -1,0 +1,15 @@
+# Binaries
+/dvault
+/datavault-agent
+/datavault-server
+*.exe
+*.test
+*.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Build
+/dist/
