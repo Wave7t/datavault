@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"github.com/example/datavault/pkg/config"
 	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
+	"github.com/example/datavault/pkg/config"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"

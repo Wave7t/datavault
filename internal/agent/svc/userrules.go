@@ -2,8 +2,8 @@ package svc
 
 import (
 	"context"
-	"os/user"
 
+	"github.com/example/datavault/pkg/auth"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -11,25 +11,18 @@ import (
 	"github.com/example/datavault/pkg/rules"
 )
 
-// extractUsername determines the calling user's username.
-//
-// Current implementation uses os.Getuid() which works correctly when the CLI
-// (dvault) talks to the agent over a Unix socket — the CLI runs as the user,
-// so the agent's effective UID matches the connecting user.
-//
-// TODO: When a SO_PEERCRED gRPC interceptor is added, switch to extracting the
-// UID from the Unix socket connection stored in context. This will be more
-// robust and doesn't rely on the agent process's own identity.
+// extractUsername determines the calling user's username from SO_PEERCRED.
 func (s *AgentService) extractUsername(ctx context.Context) (string, error) {
-	// Use os.Getuid() — the agent's own UID. Since the CLI connects over a
-	// Unix socket and runs as the same user, this is correct for the CLI case.
-	// When we add the SO_PEERCRED interceptor, we'll switch to extracting from
-	// the gRPC transport's net.UnixConn.
-	u, err := user.Current()
+	uid, err := auth.GetPeerUIDFromContext(ctx)
 	if err != nil {
-		return "", status.Errorf(codes.Internal, "cannot determine current user: %v", err)
+		return "", status.Errorf(codes.Unauthenticated, "cannot determine peer user: %v", err)
 	}
-	return u.Username, nil
+
+	username, err := auth.LookupUsername(uid)
+	if err != nil {
+		return "", status.Errorf(codes.Unauthenticated, "cannot lookup peer user: %v", err)
+	}
+	return username, nil
 }
 
 // AddUserRule adds a new backup rule for the calling user.

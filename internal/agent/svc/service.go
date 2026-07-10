@@ -6,9 +6,9 @@ package svc
 import (
 	"database/sql"
 
+	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/rules"
-	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 )
 
 // AgentService is the concrete implementation of the AgentService gRPC server.
@@ -36,5 +36,11 @@ type AgentService struct {
 
 	// RequestRestoreFn initiates a restore for the given user to targetPath.
 	// An empty targetPath means ~/restored/. Returns a task ID.
-	RequestRestoreFn func(username, targetPath string) (string, error)
+	RequestRestoreFn func(username string, uid uint32, targetPath string, nonce, signature []byte) (string, error)
+
+	// GetQuotaUsageFn returns quota usage for the calling user.
+	GetQuotaUsageFn func(username string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error)
+
+	// GetAuthChallengeFn returns a server challenge for CLI-side SSH signing.
+	GetAuthChallengeFn func() (*agentpbv1.AuthChallenge, error)
 }

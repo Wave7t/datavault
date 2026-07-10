@@ -4,6 +4,7 @@ import (
 	"context"
 
 	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
+	"github.com/example/datavault/pkg/auth"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -14,12 +15,16 @@ func (s *AgentService) RequestRestore(ctx context.Context, req *agentpbv1.Reques
 	if err != nil {
 		return nil, err
 	}
+	uid, err := auth.GetPeerUIDFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "cannot determine peer user: %v", err)
+	}
 
 	if s.RequestRestoreFn == nil {
 		return nil, status.Error(codes.Unimplemented, "restore orchestrator not configured")
 	}
 
-	taskID, err := s.RequestRestoreFn(username, req.TargetPath)
+	taskID, err := s.RequestRestoreFn(username, uid, req.TargetPath, req.Nonce, req.Signature)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "request restore: %v", err)
 	}

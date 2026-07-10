@@ -1,5 +1,3 @@
-// Package auth provides authentication utilities for the datavault service,
-// including SO_PEERCRED extraction and SSH agent signing.
 package auth
 
 import (
@@ -8,26 +6,89 @@ import (
 	"net"
 	"os/user"
 	"syscall"
+
+	"google.golang.org/grpc/peer"
 )
 
-// peercredCtxKey is the context key for storing the peer UID.
 type peercredCtxKey struct{}
 
-// ContextWithPeerUID stores the peer UID in the context.
+type PeerCredAddr struct {
+	Addr net.Addr
+	UID  uint32
+}
+
+func (a PeerCredAddr) Network() string {
+	if a.Addr == nil {
+		return "unix"
+	}
+	return a.Addr.Network()
+}
+
+func (a PeerCredAddr) String() string {
+	if a.Addr == nil {
+		return fmt.Sprintf("uid:%d", a.UID)
+	}
+	return fmt.Sprintf("%s uid:%d", a.Addr.String(), a.UID)
+}
+
+type peerCredConn struct {
+	net.Conn
+	remoteAddr net.Addr
+}
+
+func (c *peerCredConn) RemoteAddr() net.Addr {
+	return c.remoteAddr
+}
+
+type peerCredListener struct {
+	net.Listener
+}
+
+func NewPeerCredListener(listener net.Listener) net.Listener {
+	return &peerCredListener{Listener: listener}
+}
+
+func (l *peerCredListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+
+	uid, err := GetPeerUID(conn)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+
+	return &peerCredConn{
+		Conn: conn,
+		remoteAddr: PeerCredAddr{
+			Addr: conn.RemoteAddr(),
+			UID:  uid,
+		},
+	}, nil
+}
+
 func ContextWithPeerUID(ctx context.Context, uid uint32) context.Context {
 	return context.WithValue(ctx, peercredCtxKey{}, uid)
 }
 
-// GetPeerUIDFromContext extracts the peer UID from context.
 func GetPeerUIDFromContext(ctx context.Context) (uint32, error) {
-	uid, ok := ctx.Value(peercredCtxKey{}).(uint32)
-	if !ok {
-		return 0, fmt.Errorf("peer UID not found in context")
+	if uid, ok := ctx.Value(peercredCtxKey{}).(uint32); ok {
+		return uid, nil
 	}
-	return uid, nil
+
+	p, ok := peer.FromContext(ctx)
+	if !ok || p.Addr == nil {
+		return 0, fmt.Errorf("peer uid not found")
+	}
+	addr, ok := p.Addr.(PeerCredAddr)
+	if !ok {
+		return 0, fmt.Errorf("peer uid not found")
+	}
+	return addr.UID, nil
 }
 
-// GetPeerUID extracts the Unix socket peer's UID via SO_PEERCRED.
 func GetPeerUID(conn net.Conn) (uint32, error) {
 	unixConn, ok := conn.(*net.UnixConn)
 	if !ok {
@@ -46,7 +107,6 @@ func GetPeerUID(conn net.Conn) (uint32, error) {
 	return cred.Uid, nil
 }
 
-// LookupUsername returns the username for the given UID.
 func LookupUsername(uid uint32) (string, error) {
 	u, err := user.LookupId(fmt.Sprintf("%d", uid))
 	if err != nil {

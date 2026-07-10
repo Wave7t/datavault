@@ -8,9 +8,18 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
+	"os/user"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
+	"github.com/example/datavault/internal/agent/pool"
+	"github.com/example/datavault/internal/agent/transport"
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/glob"
@@ -18,7 +27,6 @@ import (
 	"github.com/example/datavault/pkg/rules"
 	"github.com/example/datavault/pkg/scanner"
 	"github.com/example/datavault/pkg/store"
-	"github.com/example/datavault/internal/agent/pool"
 )
 
 // Orchestrator coordinates backup sync operations across multiple servers.
@@ -33,6 +41,10 @@ type Orchestrator struct {
 	mu    sync.RWMutex
 	tasks map[string]*progress.Tracker
 }
+
+var lookupUserHome = userHomeDir
+
+const machineUsername = "_machine"
 
 // New creates a new Orchestrator with the given configuration, connection
 // pool, database handle, and rule store.
@@ -84,23 +96,16 @@ func (o *Orchestrator) RunSync(username, ruleName string) (string, error) {
 		return taskID, fmt.Errorf("insert task record: %w", err)
 	}
 
-	// Load the user's personal rules.
-	userRules, err := o.RuleStore.Load(username)
-	if err != nil {
-		tracker.SetPhase(progress.PhaseFailed)
-		store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
-		return taskID, fmt.Errorf("load user rules: %w", err)
-	}
-
-	// If a specific rule name was requested, filter user rules.
-	if ruleName != "" {
-		filtered := make([]rules.Rule, 0, len(userRules))
-		for _, r := range userRules {
-			if r.Name == ruleName {
-				filtered = append(filtered, r)
-			}
+	var userRules []rules.Rule
+	if username != machineUsername {
+		var err error
+		userRules, err = o.RuleStore.Load(username)
+		if err != nil {
+			tracker.SetPhase(progress.PhaseFailed)
+			store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
+			return taskID, fmt.Errorf("load user rules: %w", err)
 		}
-		userRules = filtered
+		userRules = filterRulesByName(userRules, ruleName)
 	}
 
 	// For each configured server, run the sync pipeline in parallel.
@@ -109,13 +114,17 @@ func (o *Orchestrator) RunSync(username, ruleName string) (string, error) {
 		wg.Add(1)
 		go func(serverAddr string) {
 			defer wg.Done()
-			o.syncToServer(serverAddr, username, userRules, tracker, taskID)
+			o.syncToServer(serverAddr, username, ruleName, userRules, tracker, taskID)
 		}(srv.Address)
 	}
 
 	// Mark the task as completed once all server syncs finish.
 	go func() {
 		wg.Wait()
+		phase, _, _ := tracker.Snapshot()
+		if phase == progress.PhaseFailed {
+			return
+		}
 		tracker.SetPhase(progress.PhaseCompleted)
 		store.UpdateTaskPhase(o.DB, taskID, "COMPLETED", "")
 	}()
@@ -125,7 +134,7 @@ func (o *Orchestrator) RunSync(username, ruleName string) (string, error) {
 
 // syncToServer runs the full sync pipeline for a single server:
 // fetch global config -> merge rules -> scan paths -> compute diff -> push.
-func (o *Orchestrator) syncToServer(serverAddr, username string, userRules []rules.Rule, tracker *progress.Tracker, taskID string) {
+func (o *Orchestrator) syncToServer(serverAddr, username, ruleName string, userRules []rules.Rule, tracker *progress.Tracker, taskID string) {
 	client, err := o.Pool.GetClient(serverAddr)
 	if err != nil {
 		tracker.SetPhase(progress.PhaseFailed)
@@ -133,33 +142,45 @@ func (o *Orchestrator) syncToServer(serverAddr, username string, userRules []rul
 		return
 	}
 
-	// Fetch global rules and user policy from the server.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	gcfg, err := client.GetGlobalConfig(ctx, &backuppbv1.GetGlobalConfigRequest{})
-	cancel()
-	if err != nil {
-		tracker.SetPhase(progress.PhaseFailed)
-		store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
-		return
+	ruleType := "user"
+	syncRules := userRules
+	if username == machineUsername {
+		ruleType = "machine"
+		syncRules = machineRulesFromConfig(o.Cfg.MachineRules, ruleName)
+	} else {
+		// Fetch global rules and user policy from the server.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		gcfg, err := client.GetGlobalConfig(ctx, &backuppbv1.GetGlobalConfigRequest{})
+		cancel()
+		if err != nil {
+			tracker.SetPhase(progress.PhaseFailed)
+			store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
+			return
+		}
+
+		// Convert protobuf global config to local config types.
+		globalRules := make([]config.GlobalRule, 0, len(gcfg.GlobalRules))
+		for _, gr := range gcfg.GlobalRules {
+			globalRules = append(globalRules, config.GlobalRule{
+				Name:    gr.Name,
+				Paths:   gr.Paths,
+				Exclude: gr.Exclude,
+			})
+		}
+		policy := convertUserPolicy(gcfg.UserPolicy)
+
+		// Merge global + user rules with per-user policy overrides.
+		syncRules = rules.MergeUserRules(globalRules, userRules, policy, username).Rules
 	}
 
-	// Convert protobuf global config to local config types.
-	globalRules := make([]config.GlobalRule, 0, len(gcfg.GlobalRules))
-	for _, gr := range gcfg.GlobalRules {
-		globalRules = append(globalRules, config.GlobalRule{
-			Name:    gr.Name,
-			Paths:   gr.Paths,
-			Exclude: gr.Exclude,
-		})
+	type rootDiffs struct {
+		rootPath string
+		diffs    []scanner.FileDiff
 	}
-	policy := convertUserPolicy(gcfg.UserPolicy)
 
-	// Merge global + user rules with per-user policy overrides.
-	merged := rules.MergeUserRules(globalRules, userRules, policy, username)
-
-	// Scan each enabled rule's paths and compute diffs.
-	var allDiffs []scanner.FileDiff
-	for _, rule := range merged.Rules {
+	var batches []rootDiffs
+	var totalDiffs int64
+	for _, rule := range syncRules {
 		if !rule.Enabled {
 			continue
 		}
@@ -178,30 +199,39 @@ func (o *Orchestrator) syncToServer(serverAddr, username string, userRules []rul
 			if len(diffErrs) > 0 {
 				// Log errors but continue with valid diffs.
 			}
-			allDiffs = append(allDiffs, diffs...)
+			if len(diffs) > 0 {
+				batches = append(batches, rootDiffs{rootPath: rootPath, diffs: diffs})
+				totalDiffs += int64(len(diffs))
+			}
 		}
 	}
 
 	tracker.SetPhase(progress.PhaseScanning)
-	tracker.SetTotals(int64(len(allDiffs)), int64(len(allDiffs)))
+	tracker.SetTotals(totalDiffs, totalDiffs)
 
-	// Push diffs to the server via streaming gRPC.
+	// Push diffs to the server via streaming gRPC. Snapshot state is updated
+	// only after a root's transfer succeeds.
 	tracker.SetPhase(progress.PhaseTransferring)
-	o.pushDiffsToServer(client, serverAddr, username, allDiffs, tracker)
+	for _, batch := range batches {
+		if err := o.pushDiffsToServer(client, serverAddr, username, ruleType, batch.rootPath, batch.diffs, tracker); err != nil {
+			tracker.SetPhase(progress.PhaseFailed)
+			store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
+			return
+		}
 
-	// Update the local snapshot database to reflect the new state.
-	for _, d := range allDiffs {
-		if d.Action == scanner.DiffDelete {
-			_ = store.DeleteSnapshot(o.DB, serverAddr, username, d.File.Path)
-		} else {
-			_ = store.UpsertSnapshot(o.DB, store.FileSnapshot{
-				ServerID: serverAddr,
-				Username: username,
-				FilePath: d.File.Path,
-				Mtime:    d.File.Mtime,
-				Size:     d.File.Size,
-				SHA256:   d.File.SHA256,
-			})
+		for _, d := range batch.diffs {
+			if d.Action == scanner.DiffDelete {
+				_ = store.DeleteSnapshot(o.DB, serverAddr, username, d.File.Path)
+			} else {
+				_ = store.UpsertSnapshot(o.DB, store.FileSnapshot{
+					ServerID: serverAddr,
+					Username: username,
+					FilePath: d.File.Path,
+					Mtime:    d.File.Mtime,
+					Size:     d.File.Size,
+					SHA256:   d.File.SHA256,
+				})
+			}
 		}
 	}
 }
@@ -209,112 +239,322 @@ func (o *Orchestrator) syncToServer(serverAddr, username string, userRules []rul
 // pushDiffsToServer streams file diffs to the backup server via
 // BackupService.PushBackup. It reads file contents from disk and sends them
 // in batches. This is the core transfer step of the sync pipeline.
-func (o *Orchestrator) pushDiffsToServer(client backuppbv1.BackupServiceClient, serverAddr, username string, diffs []scanner.FileDiff, tracker *progress.Tracker) {
-	if len(diffs) == 0 {
+func (o *Orchestrator) pushDiffsToServer(client backuppbv1.BackupServiceClient, serverAddr, username, ruleType, rootPath string, diffs []scanner.FileDiff, tracker *progress.Tracker) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	return transport.PushBackup(ctx, transport.PushConfig{
+		Client:   client,
+		Username: username,
+		RuleType: ruleType,
+		ServerID: serverAddr,
+		Tracker:  tracker,
+		RootPath: rootPath,
+	}, diffs)
+}
+
+func filterRulesByName(input []rules.Rule, ruleName string) []rules.Rule {
+	if ruleName == "" {
+		return input
+	}
+	filtered := make([]rules.Rule, 0, len(input))
+	for _, rule := range input {
+		if rule.Name == ruleName {
+			filtered = append(filtered, rule)
+		}
+	}
+	return filtered
+}
+
+func machineRulesFromConfig(machineRules []config.MachineRule, ruleName string) []rules.Rule {
+	result := make([]rules.Rule, 0, len(machineRules))
+	for _, rule := range machineRules {
+		if !rule.Enabled {
+			continue
+		}
+		if ruleName != "" && rule.Name != ruleName {
+			continue
+		}
+		result = append(result, rules.Rule{
+			Name:     rule.Name,
+			Paths:    rule.Paths,
+			Exclude:  rule.Exclude,
+			Schedule: rule.Schedule,
+			Enabled:  true,
+		})
+	}
+	return result
+}
+
+// RunRestore starts a full restore of the latest server-side backup into a
+// user-owned path under the user's home directory.
+func (o *Orchestrator) RunRestore(username string, uid uint32, targetPath string, nonce, signature []byte) (string, error) {
+	taskID, err := generateTaskID("restore", username)
+	if err != nil {
+		return "", fmt.Errorf("generate task ID: %w", err)
+	}
+
+	tracker := progress.NewTracker()
+
+	o.mu.Lock()
+	o.tasks[taskID] = tracker
+	o.mu.Unlock()
+
+	if err := store.InsertTask(o.DB, store.TaskRecord{
+		TaskID: taskID, ServerID: "all", Username: username,
+	}); err != nil {
+		tracker.SetPhase(progress.PhaseFailed)
+		return taskID, fmt.Errorf("insert task record: %w", err)
+	}
+
+	target, err := validateRestoreTarget(username, uid, targetPath)
+	if err != nil {
+		tracker.SetPhase(progress.PhaseFailed)
+		store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
+		return taskID, err
+	}
+
+	go o.runRestoreTask(taskID, username, target, nonce, signature, tracker)
+	return taskID, nil
+}
+
+func (o *Orchestrator) runRestoreTask(taskID, username, targetPath string, nonce, signature []byte, tracker *progress.Tracker) {
+	tracker.SetPhase(progress.PhaseTransferring)
+
+	if len(o.Cfg.Servers) == 0 {
+		tracker.SetPhase(progress.PhaseFailed)
+		store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
+		return
+	}
+	serverAddr := o.Cfg.Servers[0].Address
+	client, err := o.Pool.GetClient(serverAddr)
+	if err != nil {
+		tracker.SetPhase(progress.PhaseFailed)
+		store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	stream, err := client.PushBackup(ctx)
+	if len(nonce) == 0 || len(signature) == 0 {
+		tracker.SetPhase(progress.PhaseFailed)
+		store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
+		return
+	}
+
+	req := &backuppbv1.PullRestoreRequest{Username: username, Nonce: nonce, Signature: signature}
+	stream, err := client.PullRestore(ctx, req)
 	if err != nil {
 		tracker.SetPhase(progress.PhaseFailed)
+		store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
 		return
 	}
 
-	batchID := fmt.Sprintf("batch-%s-%s", time.Now().UTC().Format("20060102-150405"), username)
-
-	// Send files in a single batch (the transport layer handles chunking).
-	batch := &backuppbv1.BackupBatch{
-		BatchId:  batchID,
-		Username: username,
-		RuleType: "user",
-	}
-
-	for _, d := range diffs {
-		if d.Action == scanner.DiffDelete {
-			// Signal deletion to the server.
-			batch.Files = append(batch.Files, &backuppbv1.FileEntry{
-				Path:    d.File.Path,
-				Deleted: true,
-			})
-			continue
-		}
-
-		// Only push add/modify actions (DiffAdd and DiffModify).
-		if d.Action != scanner.DiffAdd && d.Action != scanner.DiffModify {
-			continue
-		}
-
-		// File content will be read by the transport layer.
-		// Here we build the metadata; the actual push is handled
-		// by the transport package which streams file contents.
-		batch.Files = append(batch.Files, &backuppbv1.FileEntry{
-			Path: d.File.Path,
-			Mode: d.File.Mode,
-		})
-	}
-
-	if len(batch.Files) > 0 {
-		if err := stream.Send(batch); err != nil {
-			tracker.SetPhase(progress.PhaseFailed)
-			return
-		}
-
-		// Wait for server acknowledgement.
-		ack, err := stream.Recv()
-		if err != nil {
-			tracker.SetPhase(progress.PhaseFailed)
-			return
-		}
-
-		if ack.Status != "OK" {
-			tracker.SetPhase(progress.PhaseFailed)
-			return
-		}
-
-		_ = ack // ack details processed by caller
-	}
-
-	if err := stream.CloseSend(); err != nil {
+	if err := restoreFromStream(stream, targetPath, tracker); err != nil {
 		tracker.SetPhase(progress.PhaseFailed)
+		store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
 		return
 	}
 
-	// Update progress with transferred file count.
-	var totalBytes int64
-	for _, d := range diffs {
-		if d.Action == scanner.DiffAdd || d.Action == scanner.DiffModify {
-			totalBytes += d.File.Size
-		}
-	}
-	tracker.AddTransferred(int64(len(diffs)), totalBytes)
+	tracker.SetPhase(progress.PhaseCompleted)
+	store.UpdateTaskPhase(o.DB, taskID, "COMPLETED", "")
 }
 
-// RunRestore is a placeholder for the restore operation.
-// Full implementation will stream files back from the server and reconstruct
-// the local directory tree.
-func (o *Orchestrator) RunRestore(username, targetPath string) (string, error) {
-	taskID, err := generateTaskID("restore", username)
+func (o *Orchestrator) GetAuthChallenge() (server string, challenge *backuppbv1.Challenge, err error) {
+	if len(o.Cfg.Servers) == 0 {
+		return "", nil, fmt.Errorf("no backup servers configured")
+	}
+	serverAddr := o.Cfg.Servers[0].Address
+	client, err := o.Pool.GetClient(serverAddr)
 	if err != nil {
-		return "", fmt.Errorf("generate task ID: %w", err)
+		return "", nil, err
 	}
 
-	// Record the task even though it is not yet implemented.
-	tracker := progress.NewTracker()
-	tracker.SetPhase(progress.PhaseFailed)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	o.mu.Lock()
-	o.tasks[taskID] = tracker
-	o.mu.Unlock()
+	challenge, err = client.GetChallenge(ctx, &backuppbv1.GetChallengeRequest{})
+	if err != nil {
+		return "", nil, fmt.Errorf("get challenge: %w", err)
+	}
+	return serverAddr, challenge, nil
+}
 
-	_ = store.InsertTask(o.DB, store.TaskRecord{
-		TaskID: taskID, ServerID: "all", Username: username,
-	})
-	_ = store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
+func (o *Orchestrator) GetQuotaUsage(username string, nonce, signature []byte) (*backuppbv1.QuotaUsage, error) {
+	if len(o.Cfg.Servers) == 0 {
+		return nil, fmt.Errorf("no backup servers configured")
+	}
+	serverAddr := o.Cfg.Servers[0].Address
+	client, err := o.Pool.GetClient(serverAddr)
+	if err != nil {
+		return nil, err
+	}
+	if len(nonce) == 0 || len(signature) == 0 {
+		return nil, fmt.Errorf("missing quota signature")
+	}
 
-	return taskID, fmt.Errorf("restore not yet implemented")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req := &backuppbv1.GetQuotaUsageRequest{Username: username, Nonce: nonce, Signature: signature}
+	usage, err := client.GetQuotaUsage(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &backuppbv1.QuotaUsage{
+		UsedBytes:  usage.UsedBytes,
+		QuotaBytes: usage.QuotaBytes,
+		Dataset:    usage.Dataset,
+	}, nil
+}
+
+func validateRestoreTarget(username string, uid uint32, targetPath string) (string, error) {
+	homeDir, err := lookupUserHome(username, uid)
+	if err != nil {
+		return "", err
+	}
+
+	if targetPath == "" {
+		targetPath = filepath.Join(homeDir, "restored")
+	}
+	if !filepath.IsAbs(targetPath) {
+		targetPath = filepath.Join(homeDir, targetPath)
+	}
+
+	homeDir = filepath.Clean(homeDir)
+	targetPath = filepath.Clean(targetPath)
+	if targetPath != homeDir && !hasPathPrefix(targetPath, homeDir) {
+		return "", fmt.Errorf("restore target must be inside %s", homeDir)
+	}
+
+	if info, err := os.Lstat(targetPath); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("restore target must not be a symlink")
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("restore target must be a directory")
+		}
+		if err := validateOwner(info, uid); err != nil {
+			return "", err
+		}
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("inspect restore target: %w", err)
+	} else {
+		parent := filepath.Dir(targetPath)
+		info, statErr := os.Lstat(parent)
+		if statErr != nil {
+			return "", fmt.Errorf("inspect restore parent: %w", statErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("restore parent must not be a symlink")
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("restore parent must be a directory")
+		}
+		if err := validateOwner(info, uid); err != nil {
+			return "", err
+		}
+	}
+
+	return targetPath, nil
+}
+
+func userHomeDir(username string, uid uint32) (string, error) {
+	u, err := user.LookupId(strconv.FormatUint(uint64(uid), 10))
+	if err != nil {
+		return "", fmt.Errorf("lookup user home: %w", err)
+	}
+	if u.Username != username {
+		return "", fmt.Errorf("username %q does not match uid %d", username, uid)
+	}
+	if u.HomeDir == "" {
+		return "", fmt.Errorf("user %q has no home directory", username)
+	}
+	return u.HomeDir, nil
+}
+
+func validateOwner(info os.FileInfo, uid uint32) error {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return fmt.Errorf("cannot inspect target owner")
+	}
+	if stat.Uid != uid {
+		return fmt.Errorf("restore target must be owned by uid %d", uid)
+	}
+	return nil
+}
+
+func hasPathPrefix(path, prefix string) bool {
+	rel, err := filepath.Rel(prefix, path)
+	return err == nil && rel != "." && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func restoreFromStream(stream backuppbv1.BackupService_PullRestoreClient, targetPath string, tracker *progress.Tracker) error {
+	parent := filepath.Dir(targetPath)
+	tmpDir, err := os.MkdirTemp(parent, ".dvault-restore-*")
+	if err != nil {
+		return fmt.Errorf("create restore temp dir: %w", err)
+	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
+
+	for {
+		batch, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("receive restore batch: %w", err)
+		}
+		if batch.IsLast {
+			break
+		}
+		for _, file := range batch.Files {
+			if err := writeRestoredFile(tmpDir, file); err != nil {
+				return err
+			}
+			tracker.AddTransferred(1, int64(len(file.Content)))
+		}
+	}
+
+	if info, err := os.Lstat(targetPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("restore target must not be a symlink")
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("inspect restore target before rename: %w", err)
+	}
+
+	if err := os.RemoveAll(targetPath); err != nil {
+		return fmt.Errorf("remove existing restore target: %w", err)
+	}
+	if err := os.Rename(tmpDir, targetPath); err != nil {
+		return fmt.Errorf("rename restore temp dir: %w", err)
+	}
+	cleanup = false
+	return nil
+}
+
+func writeRestoredFile(root string, file *backuppbv1.FileEntry) error {
+	cleanPath := filepath.Clean(file.Path)
+	if filepath.IsAbs(cleanPath) {
+		cleanPath = cleanPath[1:]
+	}
+	target := filepath.Join(root, cleanPath)
+	if target != root && !hasPathPrefix(target, root) {
+		return fmt.Errorf("restore path traversal detected: %q", file.Path)
+	}
+	if file.Deleted {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+		return fmt.Errorf("create restore parent: %w", err)
+	}
+	if err := os.WriteFile(target, file.Content, os.FileMode(file.Mode)); err != nil {
+		return fmt.Errorf("write restored file %q: %w", file.Path, err)
+	}
+	return nil
 }
 
 // convertUserPolicy converts a protobuf UserPolicy to the local config type.

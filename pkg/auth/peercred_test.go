@@ -1,9 +1,13 @@
 package auth
 
 import (
+	"context"
 	"net"
 	"os"
 	"testing"
+	"time"
+
+	"google.golang.org/grpc/peer"
 )
 
 func TestGetPeerUID(t *testing.T) {
@@ -64,6 +68,52 @@ func TestGetPeerUIDNonUnixConn(t *testing.T) {
 	}
 }
 
+func TestNewPeerCredListenerWrapsPeerUID(t *testing.T) {
+	path := t.TempDir() + "/agent.sock"
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatalf("listen unix: %v", err)
+	}
+	defer ln.Close()
+
+	wrapped := NewPeerCredListener(ln)
+	accepted := make(chan net.Conn, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		conn, err := wrapped.Accept()
+		if err != nil {
+			errCh <- err
+			return
+		}
+		accepted <- conn
+	}()
+
+	client, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatalf("dial unix: %v", err)
+	}
+	defer client.Close()
+
+	var serverConn net.Conn
+	select {
+	case err := <-errCh:
+		t.Fatalf("accept: %v", err)
+	case serverConn = <-accepted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for accept")
+	}
+	defer serverConn.Close()
+
+	addr, ok := serverConn.RemoteAddr().(PeerCredAddr)
+	if !ok {
+		t.Fatalf("expected PeerCredAddr, got %T", serverConn.RemoteAddr())
+	}
+	expectedUID := uint32(os.Getuid())
+	if addr.UID != expectedUID {
+		t.Fatalf("expected UID %d, got %d", expectedUID, addr.UID)
+	}
+}
+
 func TestLookupUsername(t *testing.T) {
 	// Lookup current user
 	currentUID := uint32(os.Getuid())
@@ -84,3 +134,43 @@ func TestLookupUsernameInvalidUID(t *testing.T) {
 		t.Fatal("expected error for invalid UID")
 	}
 }
+
+func TestGetPeerUIDFromContextExplicit(t *testing.T) {
+	const uid uint32 = 12345
+	ctx := ContextWithPeerUID(context.Background(), uid)
+
+	got, err := GetPeerUIDFromContext(ctx)
+	if err != nil {
+		t.Fatalf("GetPeerUIDFromContext: %v", err)
+	}
+	if got != uid {
+		t.Fatalf("expected UID %d, got %d", uid, got)
+	}
+}
+
+func TestGetPeerUIDFromContextPeerAddr(t *testing.T) {
+	const uid uint32 = 54321
+	ctx := peer.NewContext(context.Background(), &peer.Peer{
+		Addr: PeerCredAddr{Addr: dummyAddr("agent.sock"), UID: uid},
+	})
+
+	got, err := GetPeerUIDFromContext(ctx)
+	if err != nil {
+		t.Fatalf("GetPeerUIDFromContext: %v", err)
+	}
+	if got != uid {
+		t.Fatalf("expected UID %d, got %d", uid, got)
+	}
+}
+
+func TestGetPeerUIDFromContextMissing(t *testing.T) {
+	_, err := GetPeerUIDFromContext(context.Background())
+	if err == nil {
+		t.Fatal("expected missing peer UID error")
+	}
+}
+
+type dummyAddr string
+
+func (a dummyAddr) Network() string { return "unix" }
+func (a dummyAddr) String() string  { return string(a) }

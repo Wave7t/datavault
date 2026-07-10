@@ -4,8 +4,9 @@
 // trigger on-demand sync operations.
 //
 // Signal handling:
-//   SIGHUP            reload config from disk
-//   SIGTERM / SIGINT  graceful shutdown (waits for in-flight RPCs)
+//
+//	SIGHUP            reload config from disk
+//	SIGTERM / SIGINT  graceful shutdown (waits for in-flight RPCs)
 package main
 
 import (
@@ -22,6 +23,7 @@ import (
 	"github.com/example/datavault/internal/agent/scheduler"
 	"github.com/example/datavault/internal/agent/svc"
 	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
+	"github.com/example/datavault/pkg/auth"
 	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/rules"
 	"github.com/example/datavault/pkg/store"
@@ -118,8 +120,31 @@ func main() {
 				},
 			}, nil
 		},
-		RequestRestoreFn: func(username, targetPath string) (string, error) {
-			return orch.RunRestore(username, targetPath)
+		RequestRestoreFn: func(username string, uid uint32, targetPath string, nonce, signature []byte) (string, error) {
+			return orch.RunRestore(username, uid, targetPath, nonce, signature)
+		},
+		GetQuotaUsageFn: func(username string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error) {
+			usage, err := orch.GetQuotaUsage(username, nonce, signature)
+			if err != nil {
+				return nil, err
+			}
+			return &agentpbv1.QuotaUsage{
+				UsedBytes:  usage.UsedBytes,
+				QuotaBytes: usage.QuotaBytes,
+				Dataset:    usage.Dataset,
+				Server:     cfg.Servers[0].Address,
+			}, nil
+		},
+		GetAuthChallengeFn: func() (*agentpbv1.AuthChallenge, error) {
+			server, challenge, err := orch.GetAuthChallenge()
+			if err != nil {
+				return nil, err
+			}
+			return &agentpbv1.AuthChallenge{
+				Nonce:     challenge.Nonce,
+				ExpiresAt: challenge.ExpiresAt,
+				Server:    server,
+			}, nil
 		},
 	}
 
@@ -138,9 +163,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("listen on %s: %v", *socketPath, err)
 	}
-	if err := os.Chmod(*socketPath, 0600); err != nil {
+	if err := os.Chmod(*socketPath, 0666); err != nil {
 		log.Fatalf("chmod socket: %v", err)
 	}
+	lis = auth.NewPeerCredListener(lis)
 
 	srv := grpc.NewServer()
 	agentpbv1.RegisterAgentServiceServer(srv, agentSvc)

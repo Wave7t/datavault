@@ -29,6 +29,8 @@ const (
 	AgentService_ListMachineRules_FullMethodName  = "/agent.v1.AgentService/ListMachineRules"
 	AgentService_TriggerSync_FullMethodName       = "/agent.v1.AgentService/TriggerSync"
 	AgentService_GetSyncStatus_FullMethodName     = "/agent.v1.AgentService/GetSyncStatus"
+	AgentService_GetAuthChallenge_FullMethodName  = "/agent.v1.AgentService/GetAuthChallenge"
+	AgentService_GetQuotaUsage_FullMethodName     = "/agent.v1.AgentService/GetQuotaUsage"
 	AgentService_RequestRestore_FullMethodName    = "/agent.v1.AgentService/RequestRestore"
 )
 
@@ -46,6 +48,8 @@ type AgentServiceClient interface {
 	ListMachineRules(ctx context.Context, in *ListMachineRulesRequest, opts ...grpc.CallOption) (*ListMachineRulesResponse, error)
 	TriggerSync(ctx context.Context, in *TriggerSyncRequest, opts ...grpc.CallOption) (*TriggerSyncResponse, error)
 	GetSyncStatus(ctx context.Context, in *GetSyncStatusRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SyncStatusUpdate], error)
+	GetAuthChallenge(ctx context.Context, in *GetAuthChallengeRequest, opts ...grpc.CallOption) (*AuthChallenge, error)
+	GetQuotaUsage(ctx context.Context, in *GetQuotaUsageRequest, opts ...grpc.CallOption) (*QuotaUsage, error)
 	RequestRestore(ctx context.Context, in *RequestRestoreRequest, opts ...grpc.CallOption) (*RequestRestoreResponse, error)
 }
 
@@ -166,6 +170,26 @@ func (c *agentServiceClient) GetSyncStatus(ctx context.Context, in *GetSyncStatu
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_GetSyncStatusClient = grpc.ServerStreamingClient[SyncStatusUpdate]
 
+func (c *agentServiceClient) GetAuthChallenge(ctx context.Context, in *GetAuthChallengeRequest, opts ...grpc.CallOption) (*AuthChallenge, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AuthChallenge)
+	err := c.cc.Invoke(ctx, AgentService_GetAuthChallenge_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) GetQuotaUsage(ctx context.Context, in *GetQuotaUsageRequest, opts ...grpc.CallOption) (*QuotaUsage, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QuotaUsage)
+	err := c.cc.Invoke(ctx, AgentService_GetQuotaUsage_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *agentServiceClient) RequestRestore(ctx context.Context, in *RequestRestoreRequest, opts ...grpc.CallOption) (*RequestRestoreResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RequestRestoreResponse)
@@ -190,6 +214,8 @@ type AgentServiceServer interface {
 	ListMachineRules(context.Context, *ListMachineRulesRequest) (*ListMachineRulesResponse, error)
 	TriggerSync(context.Context, *TriggerSyncRequest) (*TriggerSyncResponse, error)
 	GetSyncStatus(*GetSyncStatusRequest, grpc.ServerStreamingServer[SyncStatusUpdate]) error
+	GetAuthChallenge(context.Context, *GetAuthChallengeRequest) (*AuthChallenge, error)
+	GetQuotaUsage(context.Context, *GetQuotaUsageRequest) (*QuotaUsage, error)
 	RequestRestore(context.Context, *RequestRestoreRequest) (*RequestRestoreResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
@@ -230,6 +256,12 @@ func (UnimplementedAgentServiceServer) TriggerSync(context.Context, *TriggerSync
 }
 func (UnimplementedAgentServiceServer) GetSyncStatus(*GetSyncStatusRequest, grpc.ServerStreamingServer[SyncStatusUpdate]) error {
 	return status.Error(codes.Unimplemented, "method GetSyncStatus not implemented")
+}
+func (UnimplementedAgentServiceServer) GetAuthChallenge(context.Context, *GetAuthChallengeRequest) (*AuthChallenge, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAuthChallenge not implemented")
+}
+func (UnimplementedAgentServiceServer) GetQuotaUsage(context.Context, *GetQuotaUsageRequest) (*QuotaUsage, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetQuotaUsage not implemented")
 }
 func (UnimplementedAgentServiceServer) RequestRestore(context.Context, *RequestRestoreRequest) (*RequestRestoreResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RequestRestore not implemented")
@@ -428,6 +460,42 @@ func _AgentService_GetSyncStatus_Handler(srv interface{}, stream grpc.ServerStre
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type AgentService_GetSyncStatusServer = grpc.ServerStreamingServer[SyncStatusUpdate]
 
+func _AgentService_GetAuthChallenge_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAuthChallengeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).GetAuthChallenge(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_GetAuthChallenge_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).GetAuthChallenge(ctx, req.(*GetAuthChallengeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_GetQuotaUsage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetQuotaUsageRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).GetQuotaUsage(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_GetQuotaUsage_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).GetQuotaUsage(ctx, req.(*GetQuotaUsageRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AgentService_RequestRestore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RequestRestoreRequest)
 	if err := dec(in); err != nil {
@@ -488,6 +556,14 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TriggerSync",
 			Handler:    _AgentService_TriggerSync_Handler,
+		},
+		{
+			MethodName: "GetAuthChallenge",
+			Handler:    _AgentService_GetAuthChallenge_Handler,
+		},
+		{
+			MethodName: "GetQuotaUsage",
+			Handler:    _AgentService_GetQuotaUsage_Handler,
 		},
 		{
 			MethodName: "RequestRestore",

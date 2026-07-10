@@ -34,6 +34,9 @@ const (
 var MethodWhitelist = map[string]bool{
 	"/backup.v1.BackupService/GetChallenge":    true,
 	"/backup.v1.BackupService/GetGlobalConfig": true,
+	"/backup.v1.BackupService/PushBackup":      true,
+	"/backup.v1.BackupService/GetQuotaUsage":   true,
+	"/backup.v1.BackupService/PullRestore":     true,
 }
 
 // HostnameFromContext extracts the hostname set by the auth interceptor.

@@ -2,13 +2,18 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
+	"github.com/example/datavault/pkg/auth"
+	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
+	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -192,11 +197,61 @@ func quotaCmd() *cobra.Command {
 		Use:   "quota",
 		Short: "Show quota usage",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// quota is queried via BackupService (agent proxies)
-			fmt.Println("quota: not yet implemented (requires agent-server proxy)")
+			challenge, err := client.GetAuthChallenge(context.Background(), &agentpbv1.GetAuthChallengeRequest{Method: "GetQuotaUsage"})
+			if err != nil {
+				return err
+			}
+			signature, err := signServerRequest("GetQuotaUsage", challenge.Nonce, &backuppbv1.GetQuotaUsageRequest{Username: challenge.Username})
+			if err != nil {
+				return err
+			}
+
+			usage, err := client.GetQuotaUsage(context.Background(), &agentpbv1.GetQuotaUsageRequest{
+				Nonce:     challenge.Nonce,
+				Signature: signature,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Server:  %s\n", usage.Server)
+			fmt.Printf("Dataset: %s\n", usage.Dataset)
+			fmt.Printf("Used:    %s\n", formatBytes(usage.UsedBytes))
+			fmt.Printf("Quota:   %s\n", formatBytes(usage.QuotaBytes))
 			return nil
 		},
 	}
+}
+
+func signServerRequest(method string, nonce []byte, msg proto.Message) ([]byte, error) {
+	data, err := proto.Marshal(msg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request for signing: %w", err)
+	}
+	hash := sha256.Sum256(data)
+
+	payload := make([]byte, 0, len(nonce)+len(method)+sha256.Size)
+	payload = append(payload, nonce...)
+	payload = append(payload, []byte(method)...)
+	payload = append(payload, hash[:]...)
+
+	_, sig, err := auth.SignWithSSHAgent(payload)
+	if err != nil {
+		return nil, err
+	}
+	return ssh.Marshal(sig), nil
+}
+
+func formatBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for value := n / unit; value >= unit; value /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 func restoreCmd() *cobra.Command {
@@ -205,8 +260,18 @@ func restoreCmd() *cobra.Command {
 		Short: "Restore backup data",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			targetPath, _ := cmd.Flags().GetString("path")
+			challenge, err := client.GetAuthChallenge(context.Background(), &agentpbv1.GetAuthChallengeRequest{Method: "PullRestore"})
+			if err != nil {
+				return err
+			}
+			signature, err := signServerRequest("PullRestore", challenge.Nonce, &backuppbv1.PullRestoreRequest{Username: challenge.Username})
+			if err != nil {
+				return err
+			}
 			resp, err := client.RequestRestore(context.Background(), &agentpbv1.RequestRestoreRequest{
 				TargetPath: targetPath,
+				Nonce:      challenge.Nonce,
+				Signature:  signature,
 			})
 			if err != nil {
 				return err

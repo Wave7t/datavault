@@ -68,6 +68,8 @@ message BatchAck {
 
 message GetQuotaUsageRequest {
   string username = 1;
+  bytes nonce = 2;
+  bytes signature = 3;         // SSH signature: nonce || "GetQuotaUsage" || sha256(payload)
 }
 message QuotaUsage {
   int64 used_bytes = 1;

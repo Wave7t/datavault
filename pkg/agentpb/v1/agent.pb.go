@@ -1069,16 +1069,250 @@ func (x *SyncStats) GetCurrentRateBps() int64 {
 	return 0
 }
 
+type GetAuthChallengeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Method        string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAuthChallengeRequest) Reset() {
+	*x = GetAuthChallengeRequest{}
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAuthChallengeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAuthChallengeRequest) ProtoMessage() {}
+
+func (x *GetAuthChallengeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAuthChallengeRequest.ProtoReflect.Descriptor instead.
+func (*GetAuthChallengeRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *GetAuthChallengeRequest) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+type AuthChallenge struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Nonce         []byte                 `protobuf:"bytes,1,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	ExpiresAt     int64                  `protobuf:"varint,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Server        string                 `protobuf:"bytes,3,opt,name=server,proto3" json:"server,omitempty"`
+	Username      string                 `protobuf:"bytes,4,opt,name=username,proto3" json:"username,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthChallenge) Reset() {
+	*x = AuthChallenge{}
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthChallenge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthChallenge) ProtoMessage() {}
+
+func (x *AuthChallenge) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthChallenge.ProtoReflect.Descriptor instead.
+func (*AuthChallenge) Descriptor() ([]byte, []int) {
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *AuthChallenge) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *AuthChallenge) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *AuthChallenge) GetServer() string {
+	if x != nil {
+		return x.Server
+	}
+	return ""
+}
+
+func (x *AuthChallenge) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+type GetQuotaUsageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Nonce         []byte                 `protobuf:"bytes,1,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Signature     []byte                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetQuotaUsageRequest) Reset() {
+	*x = GetQuotaUsageRequest{}
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetQuotaUsageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetQuotaUsageRequest) ProtoMessage() {}
+
+func (x *GetQuotaUsageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetQuotaUsageRequest.ProtoReflect.Descriptor instead.
+func (*GetQuotaUsageRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *GetQuotaUsageRequest) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *GetQuotaUsageRequest) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+type QuotaUsage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UsedBytes     int64                  `protobuf:"varint,1,opt,name=used_bytes,json=usedBytes,proto3" json:"used_bytes,omitempty"`
+	QuotaBytes    int64                  `protobuf:"varint,2,opt,name=quota_bytes,json=quotaBytes,proto3" json:"quota_bytes,omitempty"`
+	Dataset       string                 `protobuf:"bytes,3,opt,name=dataset,proto3" json:"dataset,omitempty"`
+	Server        string                 `protobuf:"bytes,4,opt,name=server,proto3" json:"server,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuotaUsage) Reset() {
+	*x = QuotaUsage{}
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuotaUsage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuotaUsage) ProtoMessage() {}
+
+func (x *QuotaUsage) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuotaUsage.ProtoReflect.Descriptor instead.
+func (*QuotaUsage) Descriptor() ([]byte, []int) {
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *QuotaUsage) GetUsedBytes() int64 {
+	if x != nil {
+		return x.UsedBytes
+	}
+	return 0
+}
+
+func (x *QuotaUsage) GetQuotaBytes() int64 {
+	if x != nil {
+		return x.QuotaBytes
+	}
+	return 0
+}
+
+func (x *QuotaUsage) GetDataset() string {
+	if x != nil {
+		return x.Dataset
+	}
+	return ""
+}
+
+func (x *QuotaUsage) GetServer() string {
+	if x != nil {
+		return x.Server
+	}
+	return ""
+}
+
 type RequestRestoreRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TargetPath    string                 `protobuf:"bytes,1,opt,name=target_path,json=targetPath,proto3" json:"target_path,omitempty"` // empty = ~/restored/
+	Nonce         []byte                 `protobuf:"bytes,2,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Signature     []byte                 `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RequestRestoreRequest) Reset() {
 	*x = RequestRestoreRequest{}
-	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[22]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1090,7 +1324,7 @@ func (x *RequestRestoreRequest) String() string {
 func (*RequestRestoreRequest) ProtoMessage() {}
 
 func (x *RequestRestoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[22]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1103,7 +1337,7 @@ func (x *RequestRestoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestRestoreRequest.ProtoReflect.Descriptor instead.
 func (*RequestRestoreRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{22}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *RequestRestoreRequest) GetTargetPath() string {
@@ -1111,6 +1345,20 @@ func (x *RequestRestoreRequest) GetTargetPath() string {
 		return x.TargetPath
 	}
 	return ""
+}
+
+func (x *RequestRestoreRequest) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *RequestRestoreRequest) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
 }
 
 type RequestRestoreResponse struct {
@@ -1122,7 +1370,7 @@ type RequestRestoreResponse struct {
 
 func (x *RequestRestoreResponse) Reset() {
 	*x = RequestRestoreResponse{}
-	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[23]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1134,7 +1382,7 @@ func (x *RequestRestoreResponse) String() string {
 func (*RequestRestoreResponse) ProtoMessage() {}
 
 func (x *RequestRestoreResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[23]
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1147,7 +1395,7 @@ func (x *RequestRestoreResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestRestoreResponse.ProtoReflect.Descriptor instead.
 func (*RequestRestoreResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{23}
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *RequestRestoreResponse) GetTaskId() string {
@@ -1216,12 +1464,33 @@ const file_pkg_agentpb_v1_agent_proto_rawDesc = "" +
 	"\rchanged_files\x18\x03 \x01(\x03R\fchangedFiles\x12+\n" +
 	"\x11transferred_files\x18\x04 \x01(\x03R\x10transferredFiles\x12+\n" +
 	"\x11transferred_bytes\x18\x05 \x01(\x03R\x10transferredBytes\x12(\n" +
-	"\x10current_rate_bps\x18\x06 \x01(\x03R\x0ecurrentRateBps\"8\n" +
+	"\x10current_rate_bps\x18\x06 \x01(\x03R\x0ecurrentRateBps\"1\n" +
+	"\x17GetAuthChallengeRequest\x12\x16\n" +
+	"\x06method\x18\x01 \x01(\tR\x06method\"x\n" +
+	"\rAuthChallenge\x12\x14\n" +
+	"\x05nonce\x18\x01 \x01(\fR\x05nonce\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\x03R\texpiresAt\x12\x16\n" +
+	"\x06server\x18\x03 \x01(\tR\x06server\x12\x1a\n" +
+	"\busername\x18\x04 \x01(\tR\busername\"J\n" +
+	"\x14GetQuotaUsageRequest\x12\x14\n" +
+	"\x05nonce\x18\x01 \x01(\fR\x05nonce\x12\x1c\n" +
+	"\tsignature\x18\x02 \x01(\fR\tsignature\"~\n" +
+	"\n" +
+	"QuotaUsage\x12\x1d\n" +
+	"\n" +
+	"used_bytes\x18\x01 \x01(\x03R\tusedBytes\x12\x1f\n" +
+	"\vquota_bytes\x18\x02 \x01(\x03R\n" +
+	"quotaBytes\x12\x18\n" +
+	"\adataset\x18\x03 \x01(\tR\adataset\x12\x16\n" +
+	"\x06server\x18\x04 \x01(\tR\x06server\"l\n" +
 	"\x15RequestRestoreRequest\x12\x1f\n" +
 	"\vtarget_path\x18\x01 \x01(\tR\n" +
-	"targetPath\"1\n" +
+	"targetPath\x12\x14\n" +
+	"\x05nonce\x18\x02 \x01(\fR\x05nonce\x12\x1c\n" +
+	"\tsignature\x18\x03 \x01(\fR\tsignature\"1\n" +
 	"\x16RequestRestoreResponse\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\tR\x06taskId2\xac\a\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId2\xc3\b\n" +
 	"\fAgentService\x12J\n" +
 	"\vAddUserRule\x12\x1c.agent.v1.AddUserRuleRequest\x1a\x1d.agent.v1.AddUserRuleResponse\x12S\n" +
 	"\x0eRemoveUserRule\x12\x1f.agent.v1.RemoveUserRuleRequest\x1a .agent.v1.RemoveUserRuleResponse\x12P\n" +
@@ -1232,7 +1501,9 @@ const file_pkg_agentpb_v1_agent_proto_rawDesc = "" +
 	"\x11RemoveMachineRule\x12\".agent.v1.RemoveMachineRuleRequest\x1a#.agent.v1.RemoveMachineRuleResponse\x12Y\n" +
 	"\x10ListMachineRules\x12!.agent.v1.ListMachineRulesRequest\x1a\".agent.v1.ListMachineRulesResponse\x12J\n" +
 	"\vTriggerSync\x12\x1c.agent.v1.TriggerSyncRequest\x1a\x1d.agent.v1.TriggerSyncResponse\x12M\n" +
-	"\rGetSyncStatus\x12\x1e.agent.v1.GetSyncStatusRequest\x1a\x1a.agent.v1.SyncStatusUpdate0\x01\x12S\n" +
+	"\rGetSyncStatus\x12\x1e.agent.v1.GetSyncStatusRequest\x1a\x1a.agent.v1.SyncStatusUpdate0\x01\x12N\n" +
+	"\x10GetAuthChallenge\x12!.agent.v1.GetAuthChallengeRequest\x1a\x17.agent.v1.AuthChallenge\x12E\n" +
+	"\rGetQuotaUsage\x12\x1e.agent.v1.GetQuotaUsageRequest\x1a\x14.agent.v1.QuotaUsage\x12S\n" +
 	"\x0eRequestRestore\x12\x1f.agent.v1.RequestRestoreRequest\x1a .agent.v1.RequestRestoreResponseB7Z5github.com/example/datavault/pkg/agentpb/v1;agentpbv1b\x06proto3"
 
 var (
@@ -1247,7 +1518,7 @@ func file_pkg_agentpb_v1_agent_proto_rawDescGZIP() []byte {
 	return file_pkg_agentpb_v1_agent_proto_rawDescData
 }
 
-var file_pkg_agentpb_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_pkg_agentpb_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_pkg_agentpb_v1_agent_proto_goTypes = []any{
 	(*Rule)(nil),                      // 0: agent.v1.Rule
 	(*AddUserRuleRequest)(nil),        // 1: agent.v1.AddUserRuleRequest
@@ -1271,8 +1542,12 @@ var file_pkg_agentpb_v1_agent_proto_goTypes = []any{
 	(*GetSyncStatusRequest)(nil),      // 19: agent.v1.GetSyncStatusRequest
 	(*SyncStatusUpdate)(nil),          // 20: agent.v1.SyncStatusUpdate
 	(*SyncStats)(nil),                 // 21: agent.v1.SyncStats
-	(*RequestRestoreRequest)(nil),     // 22: agent.v1.RequestRestoreRequest
-	(*RequestRestoreResponse)(nil),    // 23: agent.v1.RequestRestoreResponse
+	(*GetAuthChallengeRequest)(nil),   // 22: agent.v1.GetAuthChallengeRequest
+	(*AuthChallenge)(nil),             // 23: agent.v1.AuthChallenge
+	(*GetQuotaUsageRequest)(nil),      // 24: agent.v1.GetQuotaUsageRequest
+	(*QuotaUsage)(nil),                // 25: agent.v1.QuotaUsage
+	(*RequestRestoreRequest)(nil),     // 26: agent.v1.RequestRestoreRequest
+	(*RequestRestoreResponse)(nil),    // 27: agent.v1.RequestRestoreResponse
 }
 var file_pkg_agentpb_v1_agent_proto_depIdxs = []int32{
 	0,  // 0: agent.v1.ListUserRulesResponse.rules:type_name -> agent.v1.Rule
@@ -1288,20 +1563,24 @@ var file_pkg_agentpb_v1_agent_proto_depIdxs = []int32{
 	15, // 10: agent.v1.AgentService.ListMachineRules:input_type -> agent.v1.ListMachineRulesRequest
 	17, // 11: agent.v1.AgentService.TriggerSync:input_type -> agent.v1.TriggerSyncRequest
 	19, // 12: agent.v1.AgentService.GetSyncStatus:input_type -> agent.v1.GetSyncStatusRequest
-	22, // 13: agent.v1.AgentService.RequestRestore:input_type -> agent.v1.RequestRestoreRequest
-	2,  // 14: agent.v1.AgentService.AddUserRule:output_type -> agent.v1.AddUserRuleResponse
-	4,  // 15: agent.v1.AgentService.RemoveUserRule:output_type -> agent.v1.RemoveUserRuleResponse
-	6,  // 16: agent.v1.AgentService.ListUserRules:output_type -> agent.v1.ListUserRulesResponse
-	8,  // 17: agent.v1.AgentService.EnableUserRule:output_type -> agent.v1.EnableUserRuleResponse
-	10, // 18: agent.v1.AgentService.DisableUserRule:output_type -> agent.v1.DisableUserRuleResponse
-	12, // 19: agent.v1.AgentService.AddMachineRule:output_type -> agent.v1.AddMachineRuleResponse
-	14, // 20: agent.v1.AgentService.RemoveMachineRule:output_type -> agent.v1.RemoveMachineRuleResponse
-	16, // 21: agent.v1.AgentService.ListMachineRules:output_type -> agent.v1.ListMachineRulesResponse
-	18, // 22: agent.v1.AgentService.TriggerSync:output_type -> agent.v1.TriggerSyncResponse
-	20, // 23: agent.v1.AgentService.GetSyncStatus:output_type -> agent.v1.SyncStatusUpdate
-	23, // 24: agent.v1.AgentService.RequestRestore:output_type -> agent.v1.RequestRestoreResponse
-	14, // [14:25] is the sub-list for method output_type
-	3,  // [3:14] is the sub-list for method input_type
+	22, // 13: agent.v1.AgentService.GetAuthChallenge:input_type -> agent.v1.GetAuthChallengeRequest
+	24, // 14: agent.v1.AgentService.GetQuotaUsage:input_type -> agent.v1.GetQuotaUsageRequest
+	26, // 15: agent.v1.AgentService.RequestRestore:input_type -> agent.v1.RequestRestoreRequest
+	2,  // 16: agent.v1.AgentService.AddUserRule:output_type -> agent.v1.AddUserRuleResponse
+	4,  // 17: agent.v1.AgentService.RemoveUserRule:output_type -> agent.v1.RemoveUserRuleResponse
+	6,  // 18: agent.v1.AgentService.ListUserRules:output_type -> agent.v1.ListUserRulesResponse
+	8,  // 19: agent.v1.AgentService.EnableUserRule:output_type -> agent.v1.EnableUserRuleResponse
+	10, // 20: agent.v1.AgentService.DisableUserRule:output_type -> agent.v1.DisableUserRuleResponse
+	12, // 21: agent.v1.AgentService.AddMachineRule:output_type -> agent.v1.AddMachineRuleResponse
+	14, // 22: agent.v1.AgentService.RemoveMachineRule:output_type -> agent.v1.RemoveMachineRuleResponse
+	16, // 23: agent.v1.AgentService.ListMachineRules:output_type -> agent.v1.ListMachineRulesResponse
+	18, // 24: agent.v1.AgentService.TriggerSync:output_type -> agent.v1.TriggerSyncResponse
+	20, // 25: agent.v1.AgentService.GetSyncStatus:output_type -> agent.v1.SyncStatusUpdate
+	23, // 26: agent.v1.AgentService.GetAuthChallenge:output_type -> agent.v1.AuthChallenge
+	25, // 27: agent.v1.AgentService.GetQuotaUsage:output_type -> agent.v1.QuotaUsage
+	27, // 28: agent.v1.AgentService.RequestRestore:output_type -> agent.v1.RequestRestoreResponse
+	16, // [16:29] is the sub-list for method output_type
+	3,  // [3:16] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name
@@ -1318,7 +1597,7 @@ func file_pkg_agentpb_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_agentpb_v1_agent_proto_rawDesc), len(file_pkg_agentpb_v1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   24,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

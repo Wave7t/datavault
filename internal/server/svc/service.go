@@ -5,9 +5,9 @@ import (
 	"database/sql"
 
 	"github.com/example/datavault/internal/server/receiver"
+	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/zfs"
-	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 )
 
 // BackupServer implements the BackupService gRPC server.
@@ -19,6 +19,6 @@ type BackupServer struct {
 	Cfg      *config.ServerConfig
 	DB       *sql.DB
 	ZFS      *zfs.ZFS
-	KeysDir  string              // directory containing authorized_keys
-	Receiver *receiver.Receiver  // data receiving engine for PushBackup
+	KeysDir  string             // directory containing authorized_keys
+	Receiver *receiver.Receiver // data receiving engine for PushBackup
 }

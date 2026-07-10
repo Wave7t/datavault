@@ -600,6 +600,8 @@ func (x *BatchAck) GetWrittenBytes() int64 {
 type GetQuotaUsageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Nonce         []byte                 `protobuf:"bytes,2,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Signature     []byte                 `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"` // SSH signature: nonce || "GetQuotaUsage" || sha256(payload)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -639,6 +641,20 @@ func (x *GetQuotaUsageRequest) GetUsername() string {
 		return x.Username
 	}
 	return ""
+}
+
+func (x *GetQuotaUsageRequest) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *GetQuotaUsageRequest) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
 }
 
 type QuotaUsage struct {
@@ -869,9 +885,11 @@ const file_pkg_backuppb_v1_backup_proto_rawDesc = "" +
 	"\bbatch_id\x18\x01 \x01(\tR\abatchId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12#\n" +
-	"\rwritten_bytes\x18\x04 \x01(\x03R\fwrittenBytes\"2\n" +
+	"\rwritten_bytes\x18\x04 \x01(\x03R\fwrittenBytes\"f\n" +
 	"\x14GetQuotaUsageRequest\x12\x1a\n" +
-	"\busername\x18\x01 \x01(\tR\busername\"f\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x14\n" +
+	"\x05nonce\x18\x02 \x01(\fR\x05nonce\x12\x1c\n" +
+	"\tsignature\x18\x03 \x01(\fR\tsignature\"f\n" +
 	"\n" +
 	"QuotaUsage\x12\x1d\n" +
 	"\n" +

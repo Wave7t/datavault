@@ -8,13 +8,15 @@ package svc
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/example/datavault/internal/server/middleware"
-	"github.com/example/datavault/pkg/zfs"
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
+	"github.com/example/datavault/pkg/store"
+	"github.com/example/datavault/pkg/zfs"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -35,6 +37,7 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 	var username string
 	var ruleType string
 	firstBatch := true
+	nonceConsumed := false
 	totalWritten := int64(0)
 
 	for {
@@ -45,39 +48,35 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 		if err != nil {
 			return err
 		}
+		if err := zfs.ValidateUsername(batch.Username); err != nil {
+			return status.Errorf(codes.InvalidArgument, "invalid username: %v", err)
+		}
 
-		// --- First-batch initialization: signature, dataset, quota ---
+		if username != "" && batch.Username != username {
+			return status.Error(codes.InvalidArgument, "username changed within stream")
+		}
+		if ruleType != "" && batch.RuleType != ruleType {
+			return status.Error(codes.InvalidArgument, "rule type changed within stream")
+		}
+
+		if batch.RuleType == "user" {
+			if err := s.verifyBatchSignature(hostname, batch); err != nil {
+				return err
+			}
+			if !nonceConsumed {
+				ok, err := store.ConsumeNonce(s.DB, hex.EncodeToString(batch.Nonce))
+				if err != nil || !ok {
+					return status.Error(codes.Unauthenticated, "invalid or expired nonce")
+				}
+				nonceConsumed = true
+			}
+		}
+
+		// --- First-batch initialization: dataset and quota ---
 		if firstBatch {
 			firstBatch = false
 			username = batch.Username
 			ruleType = batch.RuleType
-
-			if err := zfs.ValidateUsername(username); err != nil {
-				return status.Errorf(codes.InvalidArgument, "invalid username: %v", err)
-			}
-
-			// SSH signature verification (incomplete — just compiles for now).
-			// TODO: Complete verification with proper payload construction
-			// and nonce replay protection against the stored nonce.
-			if ruleType == "user" {
-				pubKey, err := middleware.LoadAuthorizedKey(s.KeysDir, hostname, username)
-				if err != nil {
-					return status.Errorf(codes.Unauthenticated, "no authorized key for %s/%s: %v", hostname, username, err)
-				}
-
-				// Construct verification payload: nonce || "PushBackup" || sha256(serialized batch)
-				payload := append(batch.Nonce, []byte("PushBackup")...)
-				batchHash := sha256.Sum256(mustMarshal(batch))
-				payload = append(payload, batchHash[:]...)
-
-				var sig ssh.Signature
-				if err := ssh.Unmarshal(batch.Signature, &sig); err != nil {
-					return status.Error(codes.Unauthenticated, "invalid signature format")
-				}
-				if err := pubKey.Verify(payload, &sig); err != nil {
-					return status.Errorf(codes.Unauthenticated, "signature verification failed: %v", err)
-				}
-			}
 
 			// Ensure ZFS dataset exists
 			dsName := zfs.DatasetPath(s.Cfg.Server.BackupPool, hostname, username)
@@ -139,6 +138,34 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 		}
 	}
 
+	return nil
+}
+
+func (s *BackupServer) verifyBatchSignature(hostname string, batch *backuppbv1.BackupBatch) error {
+	if len(batch.Nonce) == 0 || len(batch.Signature) == 0 {
+		return status.Error(codes.Unauthenticated, "missing batch signature")
+	}
+
+	pubKey, err := middleware.LoadAuthorizedKey(s.KeysDir, hostname, batch.Username)
+	if err != nil {
+		return status.Errorf(codes.Unauthenticated, "no authorized key for %s/%s: %v", hostname, batch.Username, err)
+	}
+
+	batchForHash := proto.Clone(batch).(*backuppbv1.BackupBatch)
+	batchForHash.Signature = nil
+	batchForHash.Nonce = nil
+
+	payload := append(batch.Nonce, []byte("PushBackup")...)
+	batchHash := sha256.Sum256(mustMarshal(batchForHash))
+	payload = append(payload, batchHash[:]...)
+
+	var sig ssh.Signature
+	if err := ssh.Unmarshal(batch.Signature, &sig); err != nil {
+		return status.Error(codes.Unauthenticated, "invalid signature format")
+	}
+	if err := pubKey.Verify(payload, &sig); err != nil {
+		return status.Errorf(codes.Unauthenticated, "signature verification failed: %v", err)
+	}
 	return nil
 }
 
