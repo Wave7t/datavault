@@ -16,7 +16,7 @@
 3. Run the local quality checks:
 
    ```bash
-   make fmt-check tidy-check generate-check vet test-race
+   make fmt-check tidy-check proto-format-check proto-lint generate-check vet test-race
    ```
 
 4. Update `README.md` and deployment documentation when commands,
@@ -26,9 +26,10 @@
 
 ## Protobuf changes
 
-Generated files are checked in. When editing a `.proto` file, run `buf generate`
-and commit the generated code together with the source change. New APIs must be
-backward compatible unless the pull request explicitly documents a migration.
+Generated files are checked in. When editing a `.proto` file, run
+`buf format -w` and `buf generate`, then commit the generated code together
+with the source change. New APIs must be backward compatible unless the pull
+request explicitly documents a migration.
 
 ## Reporting vulnerabilities
 

@@ -41,7 +41,8 @@ jobs:
 
       - name: Validate Protobuf sources and generated code
         run: |
-          buf lint
+          make proto-format-check
+          make proto-lint
           make generate-check
 
       - name: Run static analysis and tests

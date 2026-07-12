@@ -39,35 +39,16 @@ func MigrateSnapshots(db *sql.DB) error {
 
 	// Existing agent state databases predate mode_bits. Keep the migration
 	// additive so an upgrade resends files once to establish their modes.
-	var hasModeBits bool
-	rows, err := db.Query(`PRAGMA table_info(file_snapshots)`)
+	var hasModeBits int
+	err = db.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM pragma_table_info('file_snapshots') WHERE name = 'mode_bits'
+		)
+	`).Scan(&hasModeBits)
 	if err != nil {
 		return fmt.Errorf("inspect file_snapshots schema: %w", err)
 	}
-	for rows.Next() {
-		var (
-			cid      int
-			name     string
-			dataType string
-			notNull  bool
-			defaultV any
-			primary  bool
-		)
-		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultV, &primary); err != nil {
-			return fmt.Errorf("read file_snapshots schema: %w", err)
-		}
-		if name == "mode_bits" {
-			hasModeBits = true
-		}
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return fmt.Errorf("iterate file_snapshots schema: %w", err)
-	}
-	if err := rows.Close(); err != nil {
-		return fmt.Errorf("close file_snapshots schema: %w", err)
-	}
-	if !hasModeBits {
+	if hasModeBits == 0 {
 		if _, err := db.Exec(`ALTER TABLE file_snapshots ADD COLUMN mode_bits INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return fmt.Errorf("add file_snapshots mode_bits: %w", err)
 		}

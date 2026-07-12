@@ -68,6 +68,9 @@ func TestMigrateSnapshotsAddsModeToExistingDatabase(t *testing.T) {
 	if err := MigrateSnapshots(db); err != nil {
 		t.Fatalf("MigrateSnapshots: %v", err)
 	}
+	if err := MigrateSnapshots(db); err != nil {
+		t.Fatalf("second MigrateSnapshots: %v", err)
+	}
 	if err := UpsertSnapshot(db, FileSnapshot{ServerID: "srv", Username: "alice", FilePath: "file", Mode: 0600}); err != nil {
 		t.Fatalf("UpsertSnapshot after migration: %v", err)
 	}

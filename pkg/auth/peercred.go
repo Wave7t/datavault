@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os/user"
-	"syscall"
 
 	"google.golang.org/grpc/peer"
 )
@@ -87,24 +86,6 @@ func GetPeerUIDFromContext(ctx context.Context) (uint32, error) {
 		return 0, fmt.Errorf("peer uid not found")
 	}
 	return addr.UID, nil
-}
-
-func GetPeerUID(conn net.Conn) (uint32, error) {
-	unixConn, ok := conn.(*net.UnixConn)
-	if !ok {
-		return 0, fmt.Errorf("not a unix socket connection")
-	}
-	f, err := unixConn.File()
-	if err != nil {
-		return 0, fmt.Errorf("get socket file descriptor: %w", err)
-	}
-	defer f.Close()
-
-	cred, err := syscall.GetsockoptUcred(int(f.Fd()), syscall.SOL_SOCKET, syscall.SO_PEERCRED)
-	if err != nil {
-		return 0, fmt.Errorf("SO_PEERCRED: %w", err)
-	}
-	return cred.Uid, nil
 }
 
 func LookupUsername(uid uint32) (string, error) {

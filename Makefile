@@ -1,9 +1,10 @@
-.PHONY: all build proto generate-check fmt fmt-check vet test test-race tidy-check ci clean install
+.PHONY: all build proto proto-format-check proto-lint generate-check fmt fmt-check vet test test-race tidy-check ci clean install
 
 BINARIES := dvault datavault-agent datavault-server
 CMDS := cmd/dvault cmd/datavault-agent cmd/datavault-server
 DIST_DIR := dist
 GO_FILES := $(shell find . -type f -name '*.go' -not -path './.git/*' -not -path './vendor/*')
+PROTO_GENERATED_FILES := pkg/agentpb/v1/agent.pb.go pkg/agentpb/v1/agent_grpc.pb.go pkg/backuppb/v1/backup.pb.go pkg/backuppb/v1/backup_grpc.pb.go
 
 all: build
 
@@ -16,8 +17,14 @@ build: proto
 proto:
 	buf generate
 
+proto-format-check:
+	test -z "$$(buf format -d)"
+
+proto-lint:
+	buf lint
+
 generate-check: proto
-	git diff --exit-code -- pkg/agentpb pkg/backuppb
+	git diff --exit-code -- $(PROTO_GENERATED_FILES)
 
 fmt:
 	gofmt -w $(GO_FILES)
@@ -37,7 +44,7 @@ test-race:
 tidy-check:
 	go mod tidy -diff
 
-ci: fmt-check tidy-check generate-check vet test-race build
+ci: fmt-check tidy-check proto-format-check proto-lint generate-check vet test-race build
 
 clean:
 	rm -rf $(DIST_DIR)/

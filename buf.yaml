@@ -4,8 +4,18 @@ breaking:
     - FILE
 lint:
   use:
-    - DEFAULT
+    - STANDARD
   ignore_only:
     PACKAGE_DIRECTORY_MATCH:
+      - pkg/agentpb/v1
+      - pkg/backuppb/v1
+    # Backup streams intentionally reuse domain payloads across RPCs rather
+    # than wrapping them in RPC-specific request/response message names.
+    RPC_REQUEST_RESPONSE_UNIQUE:
+      - pkg/agentpb/v1
+      - pkg/backuppb/v1
+    RPC_REQUEST_STANDARD_NAME:
+      - pkg/backuppb/v1
+    RPC_RESPONSE_STANDARD_NAME:
       - pkg/agentpb/v1
       - pkg/backuppb/v1

@@ -75,22 +75,22 @@ message ListMachineRulesResponse {
 }
 
 message TriggerSyncRequest {
-  string rule_name = 1;  // empty = all rules
+  string rule_name = 1; // empty = all rules
 }
 message TriggerSyncResponse {
   string task_id = 1;
 }
 
 message GetSyncStatusRequest {
-  string task_id = 1;  // empty = latest
+  string task_id = 1; // empty = latest
 }
 message SyncStatusUpdate {
   string task_id = 1;
   string username = 2;
   string server = 3;
-  string phase = 4;          // SCANNING, TRANSFERRING, COMPLETED, FAILED
+  string phase = 4; // SCANNING, TRANSFERRING, COMPLETED, FAILED
   SyncStats stats = 5;
-  repeated string current_files = 6;  // files in current batch
+  repeated string current_files = 6; // files in current batch
 }
 
 message SyncStats {
@@ -124,7 +124,7 @@ message QuotaUsage {
 }
 
 message RequestRestoreRequest {
-  string target_path = 1;  // empty = ~/restored/
+  string target_path = 1; // empty = ~/restored/
   bytes nonce = 2;
   bytes signature = 3;
 }
