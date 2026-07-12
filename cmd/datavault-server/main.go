@@ -9,14 +9,12 @@ package main
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -26,6 +24,7 @@ import (
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/store"
+	"github.com/example/datavault/pkg/tlsconfig"
 	"github.com/example/datavault/pkg/zfs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -67,11 +66,16 @@ func main() {
 		log.Fatalf("load TLS cert: %v", err)
 	}
 
+	clientCAs, err := tlsconfig.LoadCertPool(cfg.Server.CAFile)
+	if err != nil {
+		log.Fatalf("load client CA: %v", err)
+	}
+
 	tlsCfg := &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		MinVersion:   tls.VersionTLS13,
-		ClientCAs:    loadCA(cfg.Server.CertFile),
+		ClientCAs:    clientCAs,
 	}
 
 	// Auth interceptor for mTLS CN verification, nonce validation, and SSH signature checks
@@ -86,6 +90,8 @@ func main() {
 			PermitWithoutStream: false,
 		}),
 		grpc.MaxConcurrentStreams(100),
+		grpc.MaxRecvMsgSize(16*1024*1024),
+		grpc.MaxSendMsgSize(16*1024*1024),
 		grpc.StreamInterceptor(authStreamInterceptor),
 		grpc.UnaryInterceptor(authUnaryInterceptor),
 	)
@@ -133,17 +139,4 @@ func main() {
 	if err := srv.Serve(lis); err != nil {
 		log.Fatalf("serve: %v", err)
 	}
-}
-
-// loadCA loads the CA certificate pool for client certificate verification.
-// It looks for ca/ca-cert.pem relative to the server certificate directory.
-func loadCA(certFile string) *x509.CertPool {
-	caFile := filepath.Join(filepath.Dir(certFile), "ca", "ca-cert.pem")
-	caCert, err := os.ReadFile(caFile)
-	if err != nil {
-		return nil
-	}
-	pool := x509.NewCertPool()
-	pool.AppendCertsFromPEM(caCert)
-	return pool
 }

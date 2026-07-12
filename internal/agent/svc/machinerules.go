@@ -3,6 +3,7 @@ package svc
 import (
 	"context"
 	"os"
+	"path/filepath"
 
 	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"github.com/example/datavault/pkg/config"
@@ -69,6 +70,14 @@ func (s *AgentService) RemoveMachineRule(ctx context.Context, req *agentpbv1.Rem
 
 // ListMachineRules returns all machine-level backup rules.
 func (s *AgentService) ListMachineRules(ctx context.Context, req *agentpbv1.ListMachineRulesRequest) (*agentpbv1.ListMachineRulesResponse, error) {
+	username, err := s.extractUsername(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if username != "root" {
+		return nil, status.Error(codes.PermissionDenied, "only root can list machine rules")
+	}
+
 	resp := &agentpbv1.ListMachineRulesResponse{}
 	for _, r := range s.Cfg.MachineRules {
 		resp.Rules = append(resp.Rules, &agentpbv1.Rule{
@@ -88,14 +97,24 @@ func saveAgentConfig(path string, cfg *config.AgentConfig) error {
 		return err
 	}
 
-	f, err := os.Create(path)
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, ".datavault-config-*")
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-
-	if _, err := f.Write(data); err != nil {
+	tmpPath := f.Name()
+	defer os.Remove(tmpPath)
+	if err := f.Chmod(0600); err != nil {
+		f.Close()
 		return err
 	}
-	return nil
+
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }

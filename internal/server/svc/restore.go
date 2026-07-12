@@ -1,6 +1,7 @@
 package svc
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -23,6 +24,8 @@ import (
 func (s *BackupServer) PullRestore(req *backuppbv1.PullRestoreRequest, stream backuppbv1.BackupService_PullRestoreServer) error {
 	hostname := middleware.HostnameFromContext(stream.Context())
 	username := req.Username
+	ctx, cancel := context.WithTimeout(stream.Context(), maxStreamDuration)
+	defer cancel()
 
 	if err := zfs.ValidateUsername(username); err != nil {
 		return status.Errorf(codes.InvalidArgument, "invalid username: %v", err)
@@ -37,6 +40,9 @@ func (s *BackupServer) PullRestore(req *backuppbv1.PullRestoreRequest, stream ba
 
 	batchID := 0
 	err = s.Receiver.ReadAll(hostname, username, func(path string, content []byte, mode uint32) error {
+		if err := ctx.Err(); err != nil {
+			return status.FromContextError(err).Err()
+		}
 		batchID++
 		return stream.Send(&backuppbv1.RestoreBatch{
 			BatchId: fmt.Sprintf("restore-%d", batchID),
@@ -47,7 +53,13 @@ func (s *BackupServer) PullRestore(req *backuppbv1.PullRestoreRequest, stream ba
 		})
 	})
 	if err != nil {
+		if status.Code(err) == codes.DeadlineExceeded || status.Code(err) == codes.Canceled {
+			return err
+		}
 		return status.Errorf(codes.Internal, "read files: %v", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return status.FromContextError(err).Err()
 	}
 
 	// Send final batch to signal completion

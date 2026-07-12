@@ -3,12 +3,15 @@ package svc
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/example/datavault/internal/server/receiver"
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/zfs"
 )
+
+const maxStreamDuration = 10 * time.Minute
 
 // BackupServer implements the BackupService gRPC server.
 // It embeds the UnimplementedBackupServiceServer for forward compatibility

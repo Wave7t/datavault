@@ -144,3 +144,41 @@ func TestDiffMixed(t *testing.T) {
 		t.Fatalf("expected 3 total diffs, got %d", len(diffs))
 	}
 }
+
+func TestDiffDetectsModeOrHashChange(t *testing.T) {
+	db := testStoreDB(t)
+	defer db.Close()
+	store.MigrateSnapshots(db)
+
+	store.UpsertSnapshot(db, store.FileSnapshot{
+		ServerID: "srv", Username: "alice", FilePath: "file.txt",
+		Mtime: 1000, Size: 100, Mode: 0644, SHA256: []byte("old"),
+	})
+
+	for _, file := range []FileInfo{
+		{Path: "file.txt", Mtime: 1000, Size: 100, Mode: 0600, SHA256: []byte("old")},
+		{Path: "file.txt", Mtime: 1000, Size: 100, Mode: 0644, SHA256: []byte("new")},
+	} {
+		diffs, errs := ComputeDiff([]FileInfo{file}, db, "srv", "alice")
+		if len(errs) != 0 || len(diffs) != 1 || diffs[0].Action != DiffModify {
+			t.Fatalf("file %#v: diffs=%#v errs=%v", file, diffs, errs)
+		}
+	}
+}
+
+func TestDiffUnderRootDoesNotDeleteAnotherRoot(t *testing.T) {
+	db := testStoreDB(t)
+	defer db.Close()
+	store.MigrateSnapshots(db)
+
+	for _, path := range []string{"home/alice/docs/report.txt", "home/alice/projects/readme.txt"} {
+		if err := store.UpsertSnapshot(db, store.FileSnapshot{ServerID: "srv", Username: "alice", FilePath: path}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	diffs, errs := ComputeDiffUnderRoot(nil, db, "srv", "alice", "home/alice/docs")
+	if len(errs) != 0 || len(diffs) != 1 || diffs[0].File.Path != "home/alice/docs/report.txt" || diffs[0].Action != DiffDelete {
+		t.Fatalf("diffs=%#v errs=%v", diffs, errs)
+	}
+}

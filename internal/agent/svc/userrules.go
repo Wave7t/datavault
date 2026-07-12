@@ -2,6 +2,7 @@ package svc
 
 import (
 	"context"
+	"os/user"
 
 	"github.com/example/datavault/pkg/auth"
 	"google.golang.org/grpc/codes"
@@ -38,6 +39,13 @@ func (s *AgentService) AddUserRule(ctx context.Context, req *agentpbv1.AddUserRu
 		Exclude: req.Exclude,
 	}
 	if err := rule.Validate(); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	account, err := user.Lookup(username)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "lookup user home: %v", err)
+	}
+	if err := rules.ValidateUserPaths(rule.Paths, account.HomeDir); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 

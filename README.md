@@ -1,5 +1,7 @@
 # datavault / dvault
 
+[![CI](https://github.com/Wave7t/datavault/actions/workflows/ci.yml/badge.svg)](https://github.com/Wave7t/datavault/actions/workflows/ci.yml)
+
 `datavault` is a Go-based incremental backup prototype for Linux clusters. It is designed for disaster recovery: clients periodically scan configured paths, send changed files to one or more backup servers, and the server stores data in per-host/per-user ZFS datasets with quotas and snapshots.
 
 The project currently builds three binaries:
@@ -32,6 +34,11 @@ Server-side storage layout follows this shape:
     _machine/
 ```
 
+Within each dataset, files are stored below their normalized source root. For
+example, `/home/alice/docs/a.txt` is archived as `home/alice/docs/a.txt`.
+This prevents identical relative names from separate backup roots from
+overwriting one another; restore recreates that hierarchy below its target.
+
 User rules are stored on the agent host, machine rules live in the agent config, and global forced rules/quota policy live in the server config.
 
 ## Current Implementation Status
@@ -47,6 +54,8 @@ Implemented and covered by tests:
 - Quota query through `dvault quota` with CLI-side SSH signing.
 - Full restore of latest server data through `dvault restore` with CLI-side SSH signing and local path validation.
 - Server-side ZFS dataset/quota/snapshot helpers.
+- Explicit CA trust stores for both sides of the mTLS connection.
+- Archive-path namespacing across multiple configured backup roots, with file-mode change detection.
 
 Important limitations:
 
@@ -54,7 +63,9 @@ Important limitations:
 - Certificate/CA provisioning commands described in the design spec are not implemented as CLI subcommands.
 - Retry classification, failure hooks, bandwidth limiting, and scheduler time-window enforcement are only partially represented or not wired through the main sync path.
 - Restore currently reads from the first configured server; it does not automatically fail over to later servers.
+- The current `FileEntry` protocol cannot transfer a single file over 15 MiB; supporting large-file chunking needs a protocol revision.
 - The systemd unit files are provided as deployment templates and may need adjustment for your init environment.
+- The server unit permits writes to the default ZFS mount `/tank/backups`; if `backup_pool` mounts elsewhere, adjust `ReadWritePaths` before enabling the unit.
 
 ## Prerequisites
 
@@ -97,7 +108,16 @@ make clean
 sudo make install
 ```
 
+Before connecting to a ZFS-backed test server, follow the
+[server formal-test preflight](docs/server-test-preflight.md).
+
 `make install` copies binaries into `/usr/bin` and installs the sample systemd units from `scripts/`.
+
+For the full local quality gate used by GitHub Actions, run:
+
+```bash
+make ci
+```
 
 ## Configuration
 
@@ -109,6 +129,7 @@ Default path: `/etc/datavault/agent/config.yaml`
 agent:
   cert_file: "/etc/datavault/agent/cert.pem"
   key_file: "/etc/datavault/agent/key.pem"
+  ca_file: "/etc/datavault/agent/ca.pem"
 
 servers:
   - address: "backup-01.example.com:8443"
@@ -147,6 +168,7 @@ Default path: `/etc/datavault/server/config.yaml`
 server:
   cert_file: "/etc/datavault/server/cert.pem"
   key_file: "/etc/datavault/server/key.pem"
+  ca_file: "/etc/datavault/server/ca.pem"
   listen: "0.0.0.0:8443"
   backup_pool: "tank/backups"
 
@@ -212,6 +234,9 @@ Use a custom agent socket if needed:
 dvault --socket /tmp/datavault-agent.sock rule list
 ```
 
+User backup paths must be absolute and remain under that user's home
+directory. This is enforced by the Agent before it persists a rule.
+
 ## CLI Reference
 
 User commands:
@@ -239,6 +264,16 @@ dvault admin rule list
 ```
 
 Admin rule commands require the caller to be `root` according to the agent's Unix socket peer credentials.
+
+## Contributing and security
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+Report security vulnerabilities privately according to [SECURITY.md](SECURITY.md),
+not through a public issue.
+
+## License
+
+This project is released under the [MIT License](LICENSE).
 
 ## Security Model
 

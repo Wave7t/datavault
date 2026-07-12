@@ -8,16 +8,19 @@ import (
 	"testing"
 
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
+	"github.com/example/datavault/pkg/packager"
 	"github.com/example/datavault/pkg/scanner"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc"
 )
 
 type fakeBackupClient struct {
-	stream *fakePushStream
+	stream         *fakePushStream
+	challengeCalls int
 }
 
 func (c *fakeBackupClient) GetChallenge(ctx context.Context, in *backuppbv1.GetChallengeRequest, opts ...grpc.CallOption) (*backuppbv1.Challenge, error) {
+	c.challengeCalls++
 	return &backuppbv1.Challenge{Nonce: []byte("nonce")}, nil
 }
 
@@ -103,6 +106,9 @@ func TestPushBackupReadsContentsAndBatches(t *testing.T) {
 	if len(batch.Signature) == 0 || string(batch.Nonce) != "nonce" {
 		t.Fatal("expected signed batch")
 	}
+	if client.challengeCalls != 1 {
+		t.Fatalf("expected one user challenge, got %d", client.challengeCalls)
+	}
 }
 
 func TestPushBackupMachineRuleDoesNotSign(t *testing.T) {
@@ -135,5 +141,57 @@ func TestPushBackupMachineRuleDoesNotSign(t *testing.T) {
 	}
 	if len(batch.Signature) != 0 || len(batch.Nonce) != 0 {
 		t.Fatal("machine batch should not carry SSH signature")
+	}
+	if client.challengeCalls != 0 {
+		t.Fatalf("machine backup must not create a nonce, got %d challenge calls", client.challengeCalls)
+	}
+}
+
+func TestPushBackupNamespacesArchivePathsButReadsSourceRelativePath(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("alpha"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stream := &fakePushStream{}
+	client := &fakeBackupClient{stream: stream}
+	err := PushBackup(context.Background(), PushConfig{
+		Client:     client,
+		Username:   "_machine",
+		RuleType:   "machine",
+		RootPath:   root,
+		PathPrefix: "tmp/source-root",
+	}, []scanner.FileDiff{{Action: scanner.DiffAdd, File: scanner.FileInfo{Path: "tmp/source-root/a.txt", Mode: 0644}}})
+	if err != nil {
+		t.Fatalf("PushBackup: %v", err)
+	}
+	if got := string(stream.sent[0].Files[0].Content); got != "alpha" {
+		t.Fatalf("expected source-relative file contents, got %q", got)
+	}
+	if got := stream.sent[0].Files[0].Path; got != "tmp/source-root/a.txt" {
+		t.Fatalf("unexpected archive path %q", got)
+	}
+}
+
+func TestValidatePushConfigRejectsInvalidMachineIdentity(t *testing.T) {
+	err := validatePushConfig(PushConfig{Username: "alice", RuleType: "machine"})
+	if err == nil {
+		t.Fatal("expected invalid machine identity to fail")
+	}
+}
+
+func TestPushBackupRejectsOversizedFileBeforeRequestingChallenge(t *testing.T) {
+	stream := &fakePushStream{}
+	client := &fakeBackupClient{stream: stream}
+	err := PushBackup(context.Background(), PushConfig{
+		Client:   client,
+		Username: "alice",
+		RuleType: "user",
+	}, []scanner.FileDiff{{Action: scanner.DiffAdd, File: scanner.FileInfo{Path: "large", Size: packager.MaxBatchContentBytes + 1}}})
+	if err == nil {
+		t.Fatal("expected oversized file to fail")
+	}
+	if client.challengeCalls != 0 || len(stream.sent) != 0 {
+		t.Fatalf("oversized file should not open an authenticated transfer: challenges=%d sent=%d", client.challengeCalls, len(stream.sent))
 	}
 }

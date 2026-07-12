@@ -3,10 +3,10 @@ package transport
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/example/datavault/pkg/auth"
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
@@ -15,7 +15,6 @@ import (
 	"github.com/example/datavault/pkg/scanner"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -26,31 +25,38 @@ type PushConfig struct {
 	ServerID string
 	Tracker  *progress.Tracker
 	RootPath string
-	SignFunc func([]byte) ([]byte, *ssh.Signature, error)
+	// PathPrefix is prepended to each source-relative path in the archive.
+	// It is stripped again when reading source file contents locally.
+	PathPrefix string
+	SignFunc   func([]byte) ([]byte, *ssh.Signature, error)
 }
 
 func PushBackup(ctx context.Context, cfg PushConfig, diffs []scanner.FileDiff) error {
 	if len(diffs) == 0 {
 		return nil
 	}
-
-	challenge, err := cfg.Client.GetChallenge(ctx, &backuppbv1.GetChallengeRequest{})
+	if err := validatePushConfig(cfg); err != nil {
+		return err
+	}
+	batches, err := packager.PackBatchesWithinSize(diffs, packager.DefaultBatchSize, packager.MaxBatchContentBytes)
 	if err != nil {
-		return fmt.Errorf("get challenge: %w", err)
+		return fmt.Errorf("pack batches: %w", err)
 	}
 
-	ctx = metadata.AppendToOutgoingContext(ctx,
-		"x-username", cfg.Username,
-		"x-nonce", hex.EncodeToString(challenge.Nonce),
-		"x-signature", "batch",
-	)
+	var nonce []byte
+	if cfg.RuleType == "user" {
+		challenge, err := cfg.Client.GetChallenge(ctx, &backuppbv1.GetChallengeRequest{})
+		if err != nil {
+			return fmt.Errorf("get challenge: %w", err)
+		}
+		nonce = challenge.Nonce
+	}
 
 	stream, err := cfg.Client.PushBackup(ctx)
 	if err != nil {
 		return fmt.Errorf("open push stream: %w", err)
 	}
 
-	batches := packager.PackBatches(diffs, packager.DefaultBatchSize)
 	if cfg.Tracker != nil {
 		cfg.Tracker.SetTotals(int64(len(diffs)), int64(len(diffs)))
 		cfg.Tracker.SetPhase(progress.PhaseTransferring)
@@ -60,7 +66,7 @@ func PushBackup(ctx context.Context, cfg PushConfig, diffs []scanner.FileDiff) e
 		if cfg.Tracker != nil {
 			cfg.Tracker.SetCurrentFiles(batchFilePaths(batch))
 		}
-		if err := sendBatch(stream, cfg, batch, challenge.Nonce); err != nil {
+		if err := sendBatch(stream, cfg, batch, nonce); err != nil {
 			return fmt.Errorf("batch %s: %w", batch.ID, err)
 		}
 	}
@@ -90,7 +96,11 @@ func sendBatch(
 			Deleted: diff.Action == scanner.DiffDelete,
 		}
 		if diff.Action != scanner.DiffDelete {
-			absPath := filepath.Join(cfg.RootPath, diff.File.Path)
+			localPath, err := sourcePath(cfg.PathPrefix, diff.File.Path)
+			if err != nil {
+				return err
+			}
+			absPath := filepath.Join(cfg.RootPath, localPath)
 			data, err := os.ReadFile(absPath)
 			if err != nil {
 				return fmt.Errorf("read %q: %w", absPath, err)
@@ -122,6 +132,34 @@ func sendBatch(
 		cfg.Tracker.AddTransferred(int64(len(pb.Files)), ack.WrittenBytes)
 	}
 	return nil
+}
+
+func validatePushConfig(cfg PushConfig) error {
+	switch cfg.RuleType {
+	case "user":
+		if cfg.Username == "_machine" {
+			return fmt.Errorf("_machine backups must use rule type machine")
+		}
+	case "machine":
+		if cfg.Username != "_machine" {
+			return fmt.Errorf("machine backups must use username _machine")
+		}
+	default:
+		return fmt.Errorf("invalid backup rule type %q", cfg.RuleType)
+	}
+	return nil
+}
+
+func sourcePath(prefix, archivePath string) (string, error) {
+	cleanPath := filepath.Clean(archivePath)
+	if prefix == "" {
+		return cleanPath, nil
+	}
+	cleanPrefix := filepath.Clean(prefix)
+	if cleanPath == cleanPrefix || !strings.HasPrefix(cleanPath, cleanPrefix+string(filepath.Separator)) {
+		return "", fmt.Errorf("archive path %q is outside root prefix %q", archivePath, prefix)
+	}
+	return strings.TrimPrefix(cleanPath, cleanPrefix+string(filepath.Separator)), nil
 }
 
 func signBatch(pb *backuppbv1.BackupBatch, nonce []byte, signFunc func([]byte) ([]byte, *ssh.Signature, error)) error {

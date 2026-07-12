@@ -13,6 +13,7 @@ func TestLoadAgentConfig(t *testing.T) {
 agent:
   cert_file: /etc/datavault/agent/cert.pem
   key_file: /etc/datavault/agent/key.pem
+  ca_file: /etc/datavault/agent/ca.pem
 servers:
   - address: backup-server:8443
 machine_rules:
@@ -31,6 +32,9 @@ machine_rules:
 	}
 	if len(cfg.MachineRules) != 1 {
 		t.Fatalf("expected 1 machine rule, got %d", len(cfg.MachineRules))
+	}
+	if cfg.Agent.CAFile != "/etc/datavault/agent/ca.pem" {
+		t.Fatalf("unexpected CA file %q", cfg.Agent.CAFile)
 	}
 }
 

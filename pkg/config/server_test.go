@@ -13,6 +13,7 @@ func TestLoadServerConfig(t *testing.T) {
 server:
   cert_file: /etc/datavault/server/cert.pem
   key_file: /etc/datavault/server/key.pem
+  ca_file: /etc/datavault/server/ca.pem
   backup_pool: tank/backups
 allowed_hosts:
   - cn: web-01.example.com
@@ -31,6 +32,9 @@ snapshot_policy:
 	}
 	if len(cfg.AllowedHosts) != 1 {
 		t.Fatalf("expected 1 host, got %d", len(cfg.AllowedHosts))
+	}
+	if cfg.Server.CAFile != "/etc/datavault/server/ca.pem" {
+		t.Fatalf("unexpected CA file %q", cfg.Server.CAFile)
 	}
 }
 

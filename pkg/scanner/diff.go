@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/example/datavault/pkg/store"
 )
@@ -13,9 +15,9 @@ type DiffAction int
 
 const (
 	DiffSkip   DiffAction = iota // file unchanged
-	DiffAdd                       // new file not previously backed up
-	DiffModify                    // file metadata or content changed
-	DiffDelete                    // file existed before but removed on disk
+	DiffAdd                      // new file not previously backed up
+	DiffModify                   // file metadata or content changed
+	DiffDelete                   // file existed before but removed on disk
 )
 
 // FileDiff pairs a scanned FileInfo with the action that should be taken.
@@ -30,10 +32,22 @@ type FileDiff struct {
 //
 // Files are classified as:
 //   - DiffAdd:    present in the scan but not in the database
-//   - DiffModify: present in both but mtime/size changed and SHA256 differs
+//   - DiffModify: present in both but any backed-up metadata or SHA256 differs
 //   - DiffDelete: present in the database but missing from the scan
 //   - DiffSkip:   present in both with matching mtime, size and SHA256 (not returned)
 func ComputeDiff(scanned []FileInfo, db *sql.DB, serverID, username string) ([]FileDiff, []error) {
+	return computeDiff(scanned, db, serverID, username, "")
+}
+
+// ComputeDiffUnderRoot compares one archive root against only the snapshots
+// stored below its prefix. A user may configure multiple source roots with
+// identical relative paths, so delete detection must never inspect another
+// root's files.
+func ComputeDiffUnderRoot(scanned []FileInfo, db *sql.DB, serverID, username, rootPrefix string) ([]FileDiff, []error) {
+	return computeDiff(scanned, db, serverID, username, rootPrefix)
+}
+
+func computeDiff(scanned []FileInfo, db *sql.DB, serverID, username, rootPrefix string) ([]FileDiff, []error) {
 	var diffs []FileDiff
 	var errs []error
 
@@ -51,6 +65,9 @@ func ComputeDiff(scanned []FileInfo, db *sql.DB, serverID, username string) ([]F
 	}
 
 	for _, snap := range existing {
+		if rootPrefix != "" && !pathInRoot(snap.FilePath, rootPrefix) {
+			continue
+		}
 		scannedFile, found := scannedPaths[snap.FilePath]
 		if !found {
 			// File existed before but is not in the current scan → deleted.
@@ -62,14 +79,14 @@ func ComputeDiff(scanned []FileInfo, db *sql.DB, serverID, username string) ([]F
 		}
 
 		// File exists in both — check for changes.
-		if scannedFile.Mtime != snap.Mtime || scannedFile.Size != snap.Size {
-			// Metadata changed; verify content via SHA256.
-			if !bytes.Equal(scannedFile.SHA256, snap.SHA256) {
-				diffs = append(diffs, FileDiff{
-					File:   scannedFile,
-					Action: DiffModify,
-				})
-			}
+		if scannedFile.Mtime != snap.Mtime ||
+			scannedFile.Size != snap.Size ||
+			scannedFile.Mode != snap.Mode ||
+			!bytes.Equal(scannedFile.SHA256, snap.SHA256) {
+			diffs = append(diffs, FileDiff{
+				File:   scannedFile,
+				Action: DiffModify,
+			})
 		}
 		// Remove from scanned set so we do not report it as new.
 		delete(scannedPaths, snap.FilePath)
@@ -84,4 +101,10 @@ func ComputeDiff(scanned []FileInfo, db *sql.DB, serverID, username string) ([]F
 	}
 
 	return diffs, errs
+}
+
+func pathInRoot(path, root string) bool {
+	cleanPath := filepath.Clean(path)
+	cleanRoot := filepath.Clean(root)
+	return cleanPath != cleanRoot && strings.HasPrefix(cleanPath, cleanRoot+string(filepath.Separator))
 }

@@ -105,6 +105,19 @@ func (o *Orchestrator) RunSync(username, ruleName string) (string, error) {
 			store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
 			return taskID, fmt.Errorf("load user rules: %w", err)
 		}
+		account, err := user.Lookup(username)
+		if err != nil {
+			tracker.SetPhase(progress.PhaseFailed)
+			store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
+			return taskID, fmt.Errorf("lookup user home: %w", err)
+		}
+		for _, rule := range userRules {
+			if err := rules.ValidateUserPaths(rule.Paths, account.HomeDir); err != nil {
+				tracker.SetPhase(progress.PhaseFailed)
+				store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
+				return taskID, fmt.Errorf("validate user rule %q: %w", rule.Name, err)
+			}
+		}
 		userRules = filterRulesByName(userRules, ruleName)
 	}
 
@@ -174,8 +187,9 @@ func (o *Orchestrator) syncToServer(serverAddr, username, ruleName string, userR
 	}
 
 	type rootDiffs struct {
-		rootPath string
-		diffs    []scanner.FileDiff
+		rootPath   string
+		rootPrefix string
+		diffs      []scanner.FileDiff
 	}
 
 	var batches []rootDiffs
@@ -193,14 +207,24 @@ func (o *Orchestrator) syncToServer(serverAddr, username, ruleName string, userR
 			if scanErr != nil {
 				continue
 			}
+			// A partial scan cannot safely establish that omitted files were
+			// deleted. Skipping this root avoids turning a transient permission
+			// or I/O error into a remote delete marker.
+			if len(result.Errors) != 0 {
+				continue
+			}
 			tracker.AddScanned(int64(len(result.Files)))
 
-			diffs, diffErrs := scanner.ComputeDiff(result.Files, o.DB, serverAddr, username)
+			rootPrefix, archivedFiles, namespaceErr := scanner.NamespaceFiles(rootPath, result.Files)
+			if namespaceErr != nil {
+				continue
+			}
+			diffs, diffErrs := scanner.ComputeDiffUnderRoot(archivedFiles, o.DB, serverAddr, username, rootPrefix)
 			if len(diffErrs) > 0 {
 				// Log errors but continue with valid diffs.
 			}
 			if len(diffs) > 0 {
-				batches = append(batches, rootDiffs{rootPath: rootPath, diffs: diffs})
+				batches = append(batches, rootDiffs{rootPath: rootPath, rootPrefix: rootPrefix, diffs: diffs})
 				totalDiffs += int64(len(diffs))
 			}
 		}
@@ -213,7 +237,7 @@ func (o *Orchestrator) syncToServer(serverAddr, username, ruleName string, userR
 	// only after a root's transfer succeeds.
 	tracker.SetPhase(progress.PhaseTransferring)
 	for _, batch := range batches {
-		if err := o.pushDiffsToServer(client, serverAddr, username, ruleType, batch.rootPath, batch.diffs, tracker); err != nil {
+		if err := o.pushDiffsToServer(client, serverAddr, username, ruleType, batch.rootPath, batch.rootPrefix, batch.diffs, tracker); err != nil {
 			tracker.SetPhase(progress.PhaseFailed)
 			store.UpdateTaskPhase(o.DB, taskID, "FAILED", "")
 			return
@@ -239,16 +263,17 @@ func (o *Orchestrator) syncToServer(serverAddr, username, ruleName string, userR
 // pushDiffsToServer streams file diffs to the backup server via
 // BackupService.PushBackup. It reads file contents from disk and sends them
 // in batches. This is the core transfer step of the sync pipeline.
-func (o *Orchestrator) pushDiffsToServer(client backuppbv1.BackupServiceClient, serverAddr, username, ruleType, rootPath string, diffs []scanner.FileDiff, tracker *progress.Tracker) error {
+func (o *Orchestrator) pushDiffsToServer(client backuppbv1.BackupServiceClient, serverAddr, username, ruleType, rootPath, rootPrefix string, diffs []scanner.FileDiff, tracker *progress.Tracker) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	return transport.PushBackup(ctx, transport.PushConfig{
-		Client:   client,
-		Username: username,
-		RuleType: ruleType,
-		ServerID: serverAddr,
-		Tracker:  tracker,
-		RootPath: rootPath,
+		Client:     client,
+		Username:   username,
+		RuleType:   ruleType,
+		ServerID:   serverAddr,
+		Tracker:    tracker,
+		RootPath:   rootPath,
+		PathPrefix: rootPrefix,
 	}, diffs)
 }
 

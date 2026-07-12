@@ -7,6 +7,7 @@
 package svc
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -33,6 +34,8 @@ import (
 //nolint:funlen // streaming RPC handler with multi-phase logic
 func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServer) error {
 	hostname := middleware.HostnameFromContext(stream.Context())
+	ctx, cancel := context.WithTimeout(stream.Context(), maxStreamDuration)
+	defer cancel()
 
 	var username string
 	var ruleType string
@@ -41,6 +44,9 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 	totalWritten := int64(0)
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return status.FromContextError(err).Err()
+		}
 		batch, err := stream.Recv()
 		if err == io.EOF {
 			break
@@ -50,6 +56,9 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 		}
 		if err := zfs.ValidateUsername(batch.Username); err != nil {
 			return status.Errorf(codes.InvalidArgument, "invalid username: %v", err)
+		}
+		if err := validateBackupIdentity(batch); err != nil {
+			return err
 		}
 
 		if username != "" && batch.Username != username {
@@ -122,6 +131,9 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 
 	// --- Completion: snapshot and cleanup ---
 	if username != "" {
+		if err := ctx.Err(); err != nil {
+			return status.FromContextError(err).Err()
+		}
 		dsName := zfs.DatasetPath(s.Cfg.Server.BackupPool, hostname, username)
 		snapName, err := s.ZFS.CreateSnapshot(dsName)
 		if err != nil {
@@ -138,6 +150,25 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 		}
 	}
 
+	return nil
+}
+
+func validateBackupIdentity(batch *backuppbv1.BackupBatch) error {
+	switch batch.RuleType {
+	case "user":
+		if batch.Username == "_machine" {
+			return status.Error(codes.PermissionDenied, "_machine dataset accepts machine rules only")
+		}
+	case "machine":
+		if batch.Username != "_machine" {
+			return status.Error(codes.PermissionDenied, "machine rules may write only to _machine")
+		}
+		if len(batch.Nonce) != 0 || len(batch.Signature) != 0 {
+			return status.Error(codes.InvalidArgument, "machine rules must not include SSH credentials")
+		}
+	default:
+		return status.Errorf(codes.InvalidArgument, "invalid rule type %q", batch.RuleType)
+	}
 	return nil
 }
 

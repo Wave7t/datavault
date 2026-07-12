@@ -2,11 +2,13 @@ package pool
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"sync"
 	"time"
 
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
+	"github.com/example/datavault/pkg/tlsconfig"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -20,19 +22,25 @@ type ConnPool struct {
 	conns   map[string]*grpc.ClientConn
 	clients map[string]backuppbv1.BackupServiceClient
 	cert    tls.Certificate
+	rootCAs *x509.CertPool
 }
 
-// New creates a new ConnPool that authenticates with the given
-// mTLS certificate and key.
-func New(certFile, keyFile string) (*ConnPool, error) {
+// New creates a new ConnPool that authenticates with the given mTLS
+// certificate/key and verifies servers with the configured CA bundle.
+func New(certFile, keyFile, caFile string) (*ConnPool, error) {
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		return nil, fmt.Errorf("load cert: %w", err)
+	}
+	rootCAs, err := tlsconfig.LoadCertPool(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("load server CA: %w", err)
 	}
 	return &ConnPool{
 		conns:   make(map[string]*grpc.ClientConn),
 		clients: make(map[string]backuppbv1.BackupServiceClient),
 		cert:    cert,
+		rootCAs: rootCAs,
 	}, nil
 }
 
@@ -56,6 +64,7 @@ func (p *ConnPool) GetClient(address string) (backuppbv1.BackupServiceClient, er
 
 	tlsCfg := &tls.Config{
 		Certificates: []tls.Certificate{p.cert},
+		RootCAs:      p.rootCAs,
 		MinVersion:   tls.VersionTLS13,
 	}
 

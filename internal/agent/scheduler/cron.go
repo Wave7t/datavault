@@ -8,9 +8,9 @@ import (
 )
 
 type Scheduler struct {
-	cron   *cron.Cron
-	mu     sync.Mutex
-	jobs   map[string]cron.EntryID
+	cron *cron.Cron
+	mu   sync.Mutex
+	jobs map[string]cron.EntryID
 }
 
 type Job struct {

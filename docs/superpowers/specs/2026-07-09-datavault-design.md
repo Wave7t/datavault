@@ -157,6 +157,7 @@ Agent 端恢复路径校验（不可绕过）:
 server:
   cert_file: "/etc/datavault/server/cert.pem"
   key_file: "/etc/datavault/server/key.pem"
+  ca_file: "/etc/datavault/server/ca.pem"
   listen: "0.0.0.0:8443"
   backup_pool: "tank/backups"
 
@@ -191,6 +192,7 @@ snapshot_policy:
 agent:
   cert_file: "/etc/datavault/agent/cert.pem"
   key_file: "/etc/datavault/agent/key.pem"
+  ca_file: "/etc/datavault/agent/ca.pem"
 
 servers:
   - address: "backup01.example.com:8443"

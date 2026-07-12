@@ -10,6 +10,7 @@ import (
 type ServerBlock struct {
 	CertFile   string `yaml:"cert_file"`
 	KeyFile    string `yaml:"key_file"`
+	CAFile     string `yaml:"ca_file"`
 	Listen     string `yaml:"listen"`
 	BackupPool string `yaml:"backup_pool"`
 }

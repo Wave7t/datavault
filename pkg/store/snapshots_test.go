@@ -26,6 +26,7 @@ func TestUpsertAndGetSnapshot(t *testing.T) {
 		FilePath: "docs/report.pdf",
 		Mtime:    1690000000000000000,
 		Size:     12345,
+		Mode:     0640,
 		SHA256:   []byte("abcdef0123456789"),
 	}
 
@@ -42,6 +43,37 @@ func TestUpsertAndGetSnapshot(t *testing.T) {
 	}
 	if got.Size != 12345 {
 		t.Fatalf("size: expected 12345, got %d", got.Size)
+	}
+	if got.Mode != 0640 {
+		t.Fatalf("mode: expected 0640, got %#o", got.Mode)
+	}
+}
+
+func TestMigrateSnapshotsAddsModeToExistingDatabase(t *testing.T) {
+	db := testDB(t)
+	defer db.Close()
+	if _, err := db.Exec(`
+		CREATE TABLE file_snapshots (
+			server_id TEXT NOT NULL,
+			username TEXT NOT NULL,
+			file_path TEXT NOT NULL,
+			mtime_ns INTEGER NOT NULL,
+			size_bytes INTEGER NOT NULL,
+			sha256 BLOB,
+			synced_at INTEGER NOT NULL,
+			PRIMARY KEY (server_id, username, file_path)
+		)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateSnapshots(db); err != nil {
+		t.Fatalf("MigrateSnapshots: %v", err)
+	}
+	if err := UpsertSnapshot(db, FileSnapshot{ServerID: "srv", Username: "alice", FilePath: "file", Mode: 0600}); err != nil {
+		t.Fatalf("UpsertSnapshot after migration: %v", err)
+	}
+	got, err := GetSnapshot(db, "srv", "alice", "file")
+	if err != nil || got == nil || got.Mode != 0600 {
+		t.Fatalf("snapshot after migration: %#v, %v", got, err)
 	}
 }
 

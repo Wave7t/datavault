@@ -13,8 +13,9 @@ type FileSnapshot struct {
 	FilePath string
 	Mtime    int64  // nanoseconds
 	Size     int64  // bytes
+	Mode     uint32 // permission bits
 	SHA256   []byte
-	SyncedAt int64  // unix timestamp
+	SyncedAt int64 // unix timestamp
 }
 
 // MigrateSnapshots creates the file_snapshots table if it does not exist.
@@ -26,6 +27,7 @@ func MigrateSnapshots(db *sql.DB) error {
 			file_path TEXT NOT NULL,
 			mtime_ns  INTEGER NOT NULL,
 			size_bytes INTEGER NOT NULL,
+			mode_bits INTEGER NOT NULL DEFAULT 0,
 			sha256    BLOB,
 			synced_at INTEGER NOT NULL,
 			PRIMARY KEY (server_id, username, file_path)
@@ -33,6 +35,42 @@ func MigrateSnapshots(db *sql.DB) error {
 	`)
 	if err != nil {
 		return fmt.Errorf("migrate file_snapshots: %w", err)
+	}
+
+	// Existing agent state databases predate mode_bits. Keep the migration
+	// additive so an upgrade resends files once to establish their modes.
+	var hasModeBits bool
+	rows, err := db.Query(`PRAGMA table_info(file_snapshots)`)
+	if err != nil {
+		return fmt.Errorf("inspect file_snapshots schema: %w", err)
+	}
+	for rows.Next() {
+		var (
+			cid      int
+			name     string
+			dataType string
+			notNull  bool
+			defaultV any
+			primary  bool
+		)
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultV, &primary); err != nil {
+			return fmt.Errorf("read file_snapshots schema: %w", err)
+		}
+		if name == "mode_bits" {
+			hasModeBits = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("iterate file_snapshots schema: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close file_snapshots schema: %w", err)
+	}
+	if !hasModeBits {
+		if _, err := db.Exec(`ALTER TABLE file_snapshots ADD COLUMN mode_bits INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("add file_snapshots mode_bits: %w", err)
+		}
 	}
 	return nil
 }
@@ -43,9 +81,9 @@ func UpsertSnapshot(db *sql.DB, s FileSnapshot) error {
 	s.SyncedAt = time.Now().Unix()
 	_, err := db.Exec(`
 		INSERT OR REPLACE INTO file_snapshots
-			(server_id, username, file_path, mtime_ns, size_bytes, sha256, synced_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, s.ServerID, s.Username, s.FilePath, s.Mtime, s.Size, s.SHA256, s.SyncedAt)
+			(server_id, username, file_path, mtime_ns, size_bytes, mode_bits, sha256, synced_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, s.ServerID, s.Username, s.FilePath, s.Mtime, s.Size, s.Mode, s.SHA256, s.SyncedAt)
 	return err
 }
 
@@ -53,13 +91,13 @@ func UpsertSnapshot(db *sql.DB, s FileSnapshot) error {
 // Returns nil, nil if no matching row exists.
 func GetSnapshot(db *sql.DB, serverID, username, filePath string) (*FileSnapshot, error) {
 	row := db.QueryRow(`
-		SELECT server_id, username, file_path, mtime_ns, size_bytes, sha256, synced_at
+		SELECT server_id, username, file_path, mtime_ns, size_bytes, mode_bits, sha256, synced_at
 		FROM file_snapshots
 		WHERE server_id = ? AND username = ? AND file_path = ?
 	`, serverID, username, filePath)
 
 	var s FileSnapshot
-	err := row.Scan(&s.ServerID, &s.Username, &s.FilePath, &s.Mtime, &s.Size, &s.SHA256, &s.SyncedAt)
+	err := row.Scan(&s.ServerID, &s.Username, &s.FilePath, &s.Mtime, &s.Size, &s.Mode, &s.SHA256, &s.SyncedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -81,7 +119,7 @@ func DeleteSnapshot(db *sql.DB, serverID, username, filePath string) error {
 // ListUserSnapshots returns all file snapshots for a given user on a server.
 func ListUserSnapshots(db *sql.DB, serverID, username string) ([]FileSnapshot, error) {
 	rows, err := db.Query(`
-		SELECT server_id, username, file_path, mtime_ns, size_bytes, sha256, synced_at
+		SELECT server_id, username, file_path, mtime_ns, size_bytes, mode_bits, sha256, synced_at
 		FROM file_snapshots
 		WHERE server_id = ? AND username = ?
 	`, serverID, username)
@@ -93,7 +131,7 @@ func ListUserSnapshots(db *sql.DB, serverID, username string) ([]FileSnapshot, e
 	var snaps []FileSnapshot
 	for rows.Next() {
 		var s FileSnapshot
-		if err := rows.Scan(&s.ServerID, &s.Username, &s.FilePath, &s.Mtime, &s.Size, &s.SHA256, &s.SyncedAt); err != nil {
+		if err := rows.Scan(&s.ServerID, &s.Username, &s.FilePath, &s.Mtime, &s.Size, &s.Mode, &s.SHA256, &s.SyncedAt); err != nil {
 			return nil, err
 		}
 		snaps = append(snaps, s)

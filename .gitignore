@@ -13,3 +13,21 @@
 
 # Build
 /dist/
+
+# Coverage and local runtime state
+/coverage.out
+/coverage.html
+*.coverprofile
+*.db
+*.db-shm
+*.db-wal
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Operating-system metadata
+.DS_Store

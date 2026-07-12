@@ -1,0 +1,42 @@
+name: Bug report
+description: Report reproducible behavior that differs from the documented behavior.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve datavault. Do not include credentials,
+        private keys, backup contents, or host-identifying information.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the observed and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Include the smallest safe configuration and command sequence.
+      placeholder: |
+        1. Configure ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: datavault revision
+      description: Output of `git rev-parse HEAD` or the release version.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Go version, ZFS version, and whether this is Agent or Server.
+    validations:
+      required: true

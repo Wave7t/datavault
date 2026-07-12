@@ -60,7 +60,7 @@ func main() {
 	userRuleStore := rules.NewUserRuleStore(*rulesDir)
 
 	// Connection pool to backup server(s) via mTLS gRPC.
-	connPool, err := pool.New(cfg.Agent.CertFile, cfg.Agent.KeyFile)
+	connPool, err := pool.New(cfg.Agent.CertFile, cfg.Agent.KeyFile, cfg.Agent.CAFile)
 	if err != nil {
 		log.Fatalf("init connection pool: %v", err)
 	}
