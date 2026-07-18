@@ -8,6 +8,9 @@ operational constraints needed for repeatable deployments.
 
 - Linux on Agents and servers.
 - ZFS tools and a mounted backup dataset on every server.
+- `getent` with the server's configured NSS sources. The Server uses it to
+  resolve the kernel-authenticated local UID during self-service key
+  enrollment, including when accounts come from LDAP or another NSS backend.
 - A private CA trusted by both Agents and servers.
 - An SSH agent and authorized public key for every user who runs `sync`,
   `quota`, or `restore`.
@@ -25,6 +28,78 @@ creates that directory and installs `scripts/datavault-agent.logrotate`, which
 rotates the log daily and retains 14 compressed copies. File logging avoids a
 verified `SIGPIPE` failure mode in the systemd 219 journal stream with the
 static Agent binary.
+
+## OS-account key enrollment
+
+The default key trust mode is `admin_only`: an administrator creates the
+root-owned public-key file for each `(Agent CN, username)` pair. This is the
+right default when the backup server's local account authentication is not an independent
+identity authority.
+
+An administrator can explicitly trust eligible backup-server OS accounts to enroll a
+key for their own datavault identity. This is useful when users can already
+log in to the backup server under the same account name and that login is protected by the
+organisation's SSH and PAM policy. Enable only the Agent identities that the
+accounts should be able to use:
+
+```yaml
+key_enrollment:
+  mode: server_os_login
+  server_os_login:
+    allowed_agents: [web-01]
+    # Used when allowed_users is absent. System accounts are excluded.
+    min_uid: 1000
+    # Alternatively, use an explicit allow-list instead of the UID threshold.
+    # allowed_users: [alice, bob]
+```
+
+Every `allowed_agents` value must also be present in `allowed_hosts`; this
+prevents a policy typo from granting enrollment rights to a host that cannot
+connect to the backup service. Leave this block absent, or set
+`mode: admin_only`, to keep administrator-only key management.
+
+The policy does not make `/etc/datavault/server/authorized_keys` user-writable
+and requires no `sudo` rule. The root-running `datavault-server` daemon owns
+`/var/run/datavault-key-enroll.sock` (mode `0666`). On Linux it obtains the
+connecting process's UID with `SO_PEERCRED`, resolves that UID to its backup-server OS
+account, and ignores any caller-supplied identity. It therefore accepts a
+request only for the account that is actually logged in to the backup server.
+
+The unprivileged `key-enroll` client accepts exactly one public key on standard
+input, checks that the key is not a certificate, and rejects RSA keys below
+3072 bits. The daemon may only atomically replace this root-owned file:
+
+```text
+/etc/datavault/server/authorized_keys/<allowed-agent-cn>/<authenticated-os-user>.pub
+```
+
+The installed file has mode `0644`; its parent directories remain root-owned.
+The client reports only the key fingerprint, not private-key material. The
+Server journal records the authenticated OS account, UID, Agent CN, and
+fingerprint. No restart is needed after enrollment because authorization keys
+are loaded per request.
+
+For a user whose current SSH Agent key is the first key listed by
+`ssh-add -L`, enrollment can be run from the relay as follows:
+
+```bash
+ssh-add -L | sed -n '1p' |
+  ssh backup-01.example.com \
+    '/usr/bin/datavault-server key-enroll --agent web-01'
+```
+
+Using the first SSH-Agent key is important: current user operations sign with
+that key. The account needs only to log in to the backup server and be eligible under the
+configured `min_uid` (or explicit `allowed_users`) policy; it does not need
+`sudo`, group membership, or write access to `/etc`. After enrollment, run
+`dvault quota` on the relay to verify the end-to-end binding.
+
+Treat this mode as equivalent to delegating backup-key management to a backup-server OS
+account. A compromise of an eligible account can enroll an attacker key
+for that same user's historical backups. Require strong SSH authentication
+(preferably public-key authentication plus MFA), use a sensible `min_uid` to
+exclude system accounts, and disable the OS account promptly when it is no
+longer trusted.
 
 ## Agent configuration
 

@@ -15,9 +15,11 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/example/datavault/internal/server/enrollment"
 	"github.com/example/datavault/internal/server/middleware"
 	"github.com/example/datavault/internal/server/receiver"
 	"github.com/example/datavault/internal/server/svc"
@@ -33,7 +35,20 @@ import (
 	"google.golang.org/grpc/keepalive"
 )
 
+const defaultAuthorizedKeysDir = "/etc/datavault/server/authorized_keys"
+
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "key-enroll" {
+		if err := runKeyEnroll(os.Args[2:], os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "key-enroll:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	runServer()
+}
+
+func runServer() {
 	configPath := flag.String("config", "/etc/datavault/server/config.yaml", "config file path")
 	flag.Parse()
 
@@ -109,7 +124,7 @@ func main() {
 		Cfg:      cfg,
 		DB:       db,
 		ZFS:      zfsMgr,
-		KeysDir:  "/etc/datavault/server/authorized_keys",
+		KeysDir:  defaultAuthorizedKeysDir,
 		Receiver: recv,
 	}
 	backuppbv1.RegisterBackupServiceServer(srv, backupSvc)
@@ -117,6 +132,27 @@ func main() {
 	healthSvc.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
 	healthSvc.SetServingStatus("backup.v1.BackupService", healthpb.HealthCheckResponse_SERVING)
 	healthpb.RegisterHealthServer(srv, healthSvc)
+
+	enrollmentListener, err := enrollment.ListenLocal(enrollment.DefaultSocketPath)
+	if err != nil {
+		log.Fatalf("listen on local key enrollment socket: %v", err)
+	}
+	defer func() {
+		enrollmentListener.Close()
+		if err := os.Remove(enrollment.DefaultSocketPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("remove local key enrollment socket: %v", err)
+		}
+	}()
+	localEnrollment := &enrollment.LocalServer{
+		Config:  cfg,
+		KeysDir: defaultAuthorizedKeysDir,
+		Logger:  log.Default(),
+	}
+	go func() {
+		if err := localEnrollment.Serve(enrollmentListener); err != nil {
+			log.Printf("local key enrollment socket: %v", err)
+		}
+	}()
 
 	// Signal handling for config reload and graceful shutdown
 	sigCh := make(chan os.Signal, 1)
@@ -136,6 +172,7 @@ func main() {
 				}
 			case syscall.SIGTERM, syscall.SIGINT:
 				log.Println("shutting down...")
+				enrollmentListener.Close()
 				srv.GracefulStop()
 				return
 			}
@@ -147,7 +184,7 @@ func main() {
 		log.Fatalf("listen: %v", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "datavault-server listening on %s\n", cfg.Server.Listen)
+	fmt.Fprintf(os.Stderr, "datavault-server listening on %s (local key enrollment: %s)\n", cfg.Server.Listen, filepath.Clean(enrollment.DefaultSocketPath))
 	if err := srv.Serve(lis); err != nil {
 		log.Fatalf("serve: %v", err)
 	}

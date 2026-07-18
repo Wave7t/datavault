@@ -12,8 +12,7 @@ connecting an Agent to a real ZFS-backed server.
   Agent verifies (normally `servers[].address`, or `tls_server_name` when set).
 - Install each client public key as
   `/etc/datavault/server/authorized_keys/<hostname>/<username>.pub`.
-- If `backup_pool` does not mount at `/tank/backups`, update
-  `ReadWritePaths` in `scripts/datavault-server.service` before enabling it.
+- Confirm the configured `backup_pool` is mounted before enabling the service.
 - Configure only absolute user paths inside the owning user's home directory.
   Backups restore the source-root hierarchy below the requested restore target.
 - Run `dvault sync trigger` with the invoking user's `SSH_AUTH_SOCK` set. The
@@ -58,6 +57,12 @@ connecting an Agent to a real ZFS-backed server.
 9. Restart both services, then repeat an incremental upload, a deletion, and a
    restore to ensure SQLite state, ZFS datasets, and nonce state survive
    restart.
+10. When `key_enrollment.mode: server_os_login` is enabled, log in to the backup server as
+    an eligible non-root account and run `datavault-server key-enroll` without
+    `sudo`. Verify it writes only that account's key for an allowed Agent CN,
+    then run `dvault quota` from the relay. Verify that a system account below
+    `min_uid`, an Agent CN outside the policy, and a disabled `admin_only`
+    policy are rejected.
 
 ## Remaining deployment responsibilities
 

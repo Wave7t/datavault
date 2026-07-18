@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -61,6 +62,9 @@ allowed_hosts:
 	if cfg.UserPolicy.DefaultSchedule != "30 3 * * *" {
 		t.Fatalf("default schedule: got %q", cfg.UserPolicy.DefaultSchedule)
 	}
+	if cfg.KeyEnrollment.Mode != "admin_only" {
+		t.Fatalf("default key enrollment mode: got %q", cfg.KeyEnrollment.Mode)
+	}
 }
 
 func TestLoadServerConfigRejectsUnsafePolicy(t *testing.T) {
@@ -81,5 +85,37 @@ snapshot_policy:
 	}
 	if _, err := LoadServerConfig(path); err == nil {
 		t.Fatal("expected unsafe snapshot retention policy to be rejected")
+	}
+}
+
+func TestLoadServerConfigValidatesKeyEnrollmentPolicy(t *testing.T) {
+	base := `
+server:
+  cert_file: /etc/datavault/server/cert.pem
+  key_file: /etc/datavault/server/key.pem
+  ca_file: /etc/datavault/server/ca.pem
+  backup_pool: tank/backups
+allowed_hosts:
+  - cn: relay-01
+key_enrollment:
+  mode: server_os_login
+  server_os_login:
+    allowed_agents: [relay-01]
+    min_uid: 1000
+`
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(base), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadServerConfig(path); err != nil {
+		t.Fatalf("expected valid enrollment policy: %v", err)
+	}
+
+	invalid := strings.Replace(base, "allowed_agents: [relay-01]", "allowed_agents: [other-agent]", 1)
+	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadServerConfig(path); err == nil {
+		t.Fatal("expected enrollment agent outside allowed_hosts to be rejected")
 	}
 }
