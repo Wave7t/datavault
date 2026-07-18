@@ -5,19 +5,17 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/datavault-agent --config /etc/datavault/agent/config.yaml
+# Keep this unit compatible with systemd 219 (for example, CentOS 7). Its
+# journal stream can cause SIGPIPE in the statically linked Agent, so route
+# output through a rotation-managed file instead.
+ExecStart=/bin/sh -c 'exec /usr/bin/datavault-agent --config /etc/datavault/agent/config.yaml >>/var/log/datavault/agent.log 2>&1'
 Restart=always
 RestartSec=30
-IOSchedulingClass=best-effort
-IOSchedulingPriority=7
 # User-triggered backups sign through SSH_AUTH_SOCK, which normally lives
 # below /tmp/ssh-*. A private /tmp namespace would hide that socket from the
 # root-run Agent, so this must remain disabled unless a shared socket path is
 # explicitly bind-mounted into the service.
 PrivateTmp=no
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/var/lib/datavault/agent /etc/datavault/agent /var/run
 NoNewPrivileges=yes
 
 [Install]

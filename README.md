@@ -47,8 +47,8 @@ sudo make install
 ```
 
 Create or select a ZFS dataset such as `tank/backups`. The service discovers
-its ZFS mount point at startup; update `ReadWritePaths` in
-`scripts/datavault-server.service` if it is not `/tank/backups`.
+its ZFS mount point at startup. The bundled service units intentionally use a
+systemd 219-compatible baseline, including CentOS 7.
 
 ### 2. Create the private CA and issue certificates
 
@@ -83,7 +83,8 @@ server:
   cert_file: /etc/datavault/server/cert.pem
   key_file: /etc/datavault/server/key.pem
   ca_file: /etc/datavault/server/ca.pem
-  listen: "0.0.0.0:8443"
+  # Bind the server's private interface, not a public address.
+  listen: "10.20.0.10:8443"
   backup_pool: tank/backups
 
 allowed_hosts:
@@ -119,6 +120,11 @@ machine_rules:
 If routing uses an IP address, load-balancer name, or container alias that is
 not present in the server certificate, set `tls_server_name` to a certificate
 DNS/IP SAN. Do not disable TLS verification.
+
+The Agent writes service logs to `/var/log/datavault/agent.log`; `make install`
+installs a daily rotation policy that retains 14 compressed copies. This avoids
+an incompatibility between systemd 219's journal stream and the static Agent
+binary.
 
 ### 4. Authorize users and start the services
 

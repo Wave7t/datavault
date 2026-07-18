@@ -14,10 +14,17 @@ operational constraints needed for repeatable deployments.
 - Server-side user public keys at
   `/etc/datavault/server/authorized_keys/<agent-certificate-cn>/<username>.pub`.
 
-The provided systemd units are templates. Set `ReadWritePaths` in
-`scripts/datavault-server.service` to include the actual ZFS mount point, and
-do not set `PrivateTmp=yes` for the Agent unless its user SSH-agent sockets
-are deliberately bind-mounted into that namespace.
+The provided systemd units use a systemd 219-compatible baseline, so they work
+on CentOS 7 as well as newer distributions. They deliberately do not use
+`ProtectSystem=strict` or `ReadWritePaths`, which systemd 219 does not parse.
+The Agent must retain `PrivateTmp=no` unless user SSH-agent sockets are
+deliberately bind-mounted into a private namespace.
+
+The Agent writes service logs to `/var/log/datavault/agent.log`. `make install`
+creates that directory and installs `scripts/datavault-agent.logrotate`, which
+rotates the log daily and retains 14 compressed copies. File logging avoids a
+verified `SIGPIPE` failure mode in the systemd 219 journal stream with the
+static Agent binary.
 
 ## Agent configuration
 
@@ -84,7 +91,8 @@ server:
   cert_file: /etc/datavault/server/cert.pem
   key_file: /etc/datavault/server/key.pem
   ca_file: /etc/datavault/server/ca.pem
-  listen: "0.0.0.0:8443"
+  # Bind a private interface whenever Agents reach this server privately.
+  listen: "10.20.0.10:8443"
   backup_pool: tank/backups
 
 allowed_hosts:
@@ -118,6 +126,11 @@ The server creates per-host and per-user datasets, applies quotas, and creates
 recovery snapshots only after a terminally successful upload. Keep the parent
 backup dataset mounted and reserve enough free space for ZFS metadata and the
 configured `min_free_gb` policy.
+
+Do not bind the service to a public interface unless that exposure is a
+deliberate, firewall-restricted design. Ensure every Agent `servers.address`
+host or `tls_server_name` is present as a DNS or IP SAN in the server
+certificate.
 
 ## Certificate lifecycle
 

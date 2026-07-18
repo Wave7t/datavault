@@ -55,4 +55,7 @@ install: build
 	install -m 755 $(DIST_DIR)/datavault-server /usr/bin/datavault-server
 	install -m 644 scripts/datavault-agent.service /etc/systemd/system/
 	install -m 644 scripts/datavault-server.service /etc/systemd/system/
+	install -d -m 750 /var/log/datavault
+	install -m 640 /dev/null /var/log/datavault/agent.log
+	install -m 644 scripts/datavault-agent.logrotate /etc/logrotate.d/datavault-agent
 	systemctl daemon-reload

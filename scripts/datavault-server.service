@@ -9,8 +9,9 @@ ExecStart=/usr/bin/datavault-server --config /etc/datavault/server/config.yaml
 Restart=always
 RestartSec=10
 PrivateTmp=yes
-ProtectSystem=strict
-ReadWritePaths=/var/lib/datavault/server /tank/backups
+# Keep this unit compatible with systemd 219 (for example, CentOS 7).
+# ProtectSystem=strict and ReadWritePaths were introduced later and are not
+# parsed by that baseline.
 NoNewPrivileges=yes
 
 [Install]
