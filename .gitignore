@@ -14,6 +14,9 @@
 # Build
 /dist/
 
+# Local Superpowers planning workspace
+/docs/superpowers/
+
 # Coverage and local runtime state
 /coverage.out
 /coverage.html

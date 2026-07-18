@@ -2,8 +2,8 @@
 
 ## Before you start
 
-- Read the [design specification](docs/superpowers/specs/2026-07-09-datavault-design.md)
-  and the [server-test preflight](docs/server-test-preflight.md).
+- Read the [development guide](docs/development.md) and the
+  [server-test preflight](docs/server-test-preflight.md).
 - Do not put certificates, private keys, backup data, SSH-agent sockets, or
   production hostnames in commits, issue reports, or test fixtures.
 - Keep the Agent-to-Server security model intact: mTLS identifies a machine;
