@@ -3,7 +3,9 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/example/datavault/pkg/zfs"
 	"gopkg.in/yaml.v3"
 )
 
@@ -76,6 +78,44 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	}
 	if cfg.UserPolicy.DefaultSchedule == "" {
 		cfg.UserPolicy.DefaultSchedule = "30 3 * * *"
+	}
+	for field, value := range map[string]string{
+		"server.cert_file":   cfg.Server.CertFile,
+		"server.key_file":    cfg.Server.KeyFile,
+		"server.ca_file":     cfg.Server.CAFile,
+		"server.backup_pool": cfg.Server.BackupPool,
+	} {
+		if strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("%s is required", field)
+		}
+	}
+	if err := zfs.ValidateDatasetName(cfg.Server.BackupPool); err != nil {
+		return nil, fmt.Errorf("server.backup_pool: %w", err)
+	}
+	if len(cfg.AllowedHosts) == 0 {
+		return nil, fmt.Errorf("at least one allowed_hosts entry is required")
+	}
+	for i, host := range cfg.AllowedHosts {
+		if err := zfs.ValidateHostname(host.CN); err != nil {
+			return nil, fmt.Errorf("allowed_hosts[%d].cn: %w", i, err)
+		}
+	}
+	if cfg.UserPolicy.DefaultQuotaGB <= 0 {
+		return nil, fmt.Errorf("user_policy.default_quota_gb must be positive")
+	}
+	for username, override := range cfg.UserPolicy.PerUserOverrides {
+		if err := zfs.ValidateUsername(username); err != nil {
+			return nil, fmt.Errorf("user_policy.per_user_overrides[%q]: %w", username, err)
+		}
+		if override.QuotaGB <= 0 {
+			return nil, fmt.Errorf("user_policy.per_user_overrides[%q].quota_gb must be positive", username)
+		}
+	}
+	if cfg.SnapshotPolicy.MaxSnapshots < cfg.SnapshotPolicy.MinSnapshots {
+		return nil, fmt.Errorf("snapshot_policy.max_snapshots must be at least min_snapshots")
+	}
+	if cfg.SnapshotPolicy.MinFreeGB < 0 {
+		return nil, fmt.Errorf("snapshot_policy.min_free_gb must not be negative")
 	}
 
 	return &cfg, nil

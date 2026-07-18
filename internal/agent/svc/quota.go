@@ -16,7 +16,7 @@ func (s *AgentService) GetQuotaUsage(ctx context.Context, req *agentpbv1.GetQuot
 	if s.GetQuotaUsageFn == nil {
 		return nil, status.Error(codes.Unimplemented, "quota orchestrator not configured")
 	}
-	usage, err := s.GetQuotaUsageFn(username, req.Nonce, req.Signature)
+	usage, err := s.GetQuotaUsageFn(username, req.Server, req.Nonce, req.Signature)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "get quota usage: %v", err)
 	}

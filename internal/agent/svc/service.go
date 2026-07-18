@@ -26,20 +26,21 @@ type AgentService struct {
 	UserRuleStore *rules.UserRuleStore
 	ConfigPath    string // path to agent config file for saveAgentConfig
 
-	// TriggerSyncFn is called to start a sync for a given user and rule.
-	// An empty ruleName means "all rules". Returns a task ID.
-	TriggerSyncFn func(username, ruleName string) (string, error)
+	// TriggerSyncFn is called to start a sync for a given user and rule using
+	// that user's validated SSH-agent socket. An empty ruleName means "all
+	// rules". Returns a task ID.
+	TriggerSyncFn func(username, ruleName, sshAuthSock string, uid uint32) (string, error)
 
-	// GetStatusFn returns the current sync status for a task.
+	// GetStatusFn returns the current sync status for a task owned by username.
 	// An empty taskID means "latest task".
-	GetStatusFn func(taskID string) (*agentpbv1.SyncStatusUpdate, error)
+	GetStatusFn func(username, taskID string) (*agentpbv1.SyncStatusUpdate, error)
 
 	// RequestRestoreFn initiates a restore for the given user to targetPath.
 	// An empty targetPath means ~/restored/. Returns a task ID.
-	RequestRestoreFn func(username string, uid uint32, targetPath string, nonce, signature []byte) (string, error)
+	RequestRestoreFn func(username string, uid uint32, targetPath, server string, nonce, signature []byte) (string, error)
 
 	// GetQuotaUsageFn returns quota usage for the calling user.
-	GetQuotaUsageFn func(username string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error)
+	GetQuotaUsageFn func(username, server string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error)
 
 	// GetAuthChallengeFn returns a server challenge for CLI-side SSH signing.
 	GetAuthChallengeFn func() (*agentpbv1.AuthChallenge, error)

@@ -24,7 +24,7 @@ func (s *AgentService) RequestRestore(ctx context.Context, req *agentpbv1.Reques
 		return nil, status.Error(codes.Unimplemented, "restore orchestrator not configured")
 	}
 
-	taskID, err := s.RequestRestoreFn(username, uid, req.TargetPath, req.Nonce, req.Signature)
+	taskID, err := s.RequestRestoreFn(username, uid, req.TargetPath, req.Server, req.Nonce, req.Signature)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "request restore: %v", err)
 	}

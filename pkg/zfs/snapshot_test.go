@@ -3,6 +3,7 @@ package zfs
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // --- Unit tests (no ZFS required) ---
@@ -15,23 +16,22 @@ func TestSnapshotNameFormat(t *testing.T) {
 
 	name := z.SnapshotName("tank/backups/web-01/alice")
 
-	// Expected format: tank/backups/web-01/alice@sync-YYYYMMDD-HHMMSS
+	// Expected format: tank/backups/web-01/alice@sync-YYYYMMDD-HHMMSS.NNNNNNNNN
 	if !strings.HasPrefix(name, "tank/backups/web-01/alice@sync-") {
 		t.Fatalf("unexpected snapshot name format: %q", name)
 	}
 
-	// Verify timestamp portion is 15 chars: YYYYMMDD-HHMMSS
+	// Verify timestamp portion has nanosecond precision.
 	parts := strings.SplitN(name, "@sync-", 2)
 	if len(parts) != 2 {
 		t.Fatalf("expected @sync- separator in %q", name)
 	}
 	ts := parts[1]
-	if len(ts) != 15 {
-		t.Fatalf("expected timestamp length 15 (YYYYMMDD-HHMMSS), got %d: %q", len(ts), ts)
+	if len(ts) != 25 {
+		t.Fatalf("expected timestamp length 25 (YYYYMMDD-HHMMSS.NNNNNNNNN), got %d: %q", len(ts), ts)
 	}
-	// Verify format: 8 digits + "-" + 6 digits
-	if ts[8] != '-' {
-		t.Fatalf("expected dash at position 8 in timestamp: %q", ts)
+	if _, err := time.Parse("20060102-150405.000000000", ts); err != nil {
+		t.Fatalf("parse timestamp %q: %v", ts, err)
 	}
 }
 

@@ -28,6 +28,8 @@ import (
 	"github.com/example/datavault/pkg/zfs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -57,8 +59,14 @@ func main() {
 		log.Fatalf("init ZFS: %v", err)
 	}
 
-	// Data receiver for writing backup files to ZFS mount points
-	recv := receiver.New("/" + cfg.Server.BackupPool)
+	// Data receiver for writing backup files to the configured dataset's real
+	// mount point. Do not derive this path from the dataset name: ZFS may be
+	// mounted somewhere other than /<pool>/<dataset>.
+	mountpoint, err := zfsMgr.Mountpoint()
+	if err != nil {
+		log.Fatalf("get backup pool mountpoint: %v", err)
+	}
+	recv := receiver.New(mountpoint)
 
 	// TLS configuration with mutual TLS (mTLS)
 	cert, err := tls.LoadX509KeyPair(cfg.Server.CertFile, cfg.Server.KeyFile)
@@ -105,6 +113,10 @@ func main() {
 		Receiver: recv,
 	}
 	backuppbv1.RegisterBackupServiceServer(srv, backupSvc)
+	healthSvc := health.NewServer()
+	healthSvc.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+	healthSvc.SetServingStatus("backup.v1.BackupService", healthpb.HealthCheckResponse_SERVING)
+	healthpb.RegisterHealthServer(srv, healthSvc)
 
 	// Signal handling for config reload and graceful shutdown
 	sigCh := make(chan os.Signal, 1)

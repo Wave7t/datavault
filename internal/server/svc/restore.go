@@ -16,6 +16,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const restoreChunkContentBytes = 4 * 1024 * 1024
+
 // PullRestore is a server-streaming RPC that sends all files for a user's
 // dataset in batches. The hostname is extracted from the mTLS context,
 // the username comes from the request and is validated. Files are read
@@ -38,8 +40,18 @@ func (s *BackupServer) PullRestore(req *backuppbv1.PullRestoreRequest, stream ba
 		return status.Error(codes.Unauthenticated, "invalid or expired nonce")
 	}
 
+	dsName := zfs.DatasetPath(s.Cfg.Server.BackupPool, hostname, username)
+	snapshot, err := s.ZFS.LatestSnapshot(dsName)
+	if err != nil {
+		return status.Errorf(codes.FailedPrecondition, "find recovery snapshot: %v", err)
+	}
+	clone, mountpoint, err := s.ZFS.CreateRestoreClone(snapshot)
+	if err != nil {
+		return status.Errorf(codes.Internal, "create recovery clone: %v", err)
+	}
+
 	batchID := 0
-	err = s.Receiver.ReadAll(hostname, username, func(path string, content []byte, mode uint32) error {
+	err = s.Receiver.ReadAllChunksFrom(mountpoint, restoreChunkContentBytes, func(path string, content []byte, mode uint32, offset uint64, chunked, final bool) error {
 		if err := ctx.Err(); err != nil {
 			return status.FromContextError(err).Err()
 		}
@@ -47,16 +59,26 @@ func (s *BackupServer) PullRestore(req *backuppbv1.PullRestoreRequest, stream ba
 		return stream.Send(&backuppbv1.RestoreBatch{
 			BatchId: fmt.Sprintf("restore-%d", batchID),
 			Files: []*backuppbv1.FileEntry{
-				{Path: path, Content: content, Mode: mode},
+				{Path: path, Content: content, Mode: mode, Chunked: chunked, ChunkOffset: offset, FinalChunk: final},
 			},
 			IsLast: false,
 		})
 	})
 	if err != nil {
+		cleanupErr := s.ZFS.DestroyRestoreClone(clone)
 		if status.Code(err) == codes.DeadlineExceeded || status.Code(err) == codes.Canceled {
+			if cleanupErr != nil {
+				return status.Errorf(codes.Internal, "restore canceled and destroy recovery clone: %v", cleanupErr)
+			}
 			return err
 		}
+		if cleanupErr != nil {
+			return status.Errorf(codes.Internal, "read files: %v; destroy recovery clone: %v", err, cleanupErr)
+		}
 		return status.Errorf(codes.Internal, "read files: %v", err)
+	}
+	if err := s.ZFS.DestroyRestoreClone(clone); err != nil {
+		return status.Errorf(codes.Internal, "destroy recovery clone: %v", err)
 	}
 	if err := ctx.Err(); err != nil {
 		return status.FromContextError(err).Err()

@@ -32,6 +32,7 @@ const (
 // MethodWhitelist contains RPC methods that skip SSH signature verification.
 // These are the initial handshake endpoints used before authentication is established.
 var MethodWhitelist = map[string]bool{
+	"/grpc.health.v1.Health/Check":             true,
 	"/backup.v1.BackupService/GetChallenge":    true,
 	"/backup.v1.BackupService/GetGlobalConfig": true,
 	"/backup.v1.BackupService/PushBackup":      true,

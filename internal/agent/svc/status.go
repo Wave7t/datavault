@@ -14,9 +14,13 @@ func (s *AgentService) GetSyncStatus(req *agentpbv1.GetSyncStatusRequest, stream
 	if s.GetStatusFn == nil {
 		return status.Error(codes.Unimplemented, "status tracker not configured")
 	}
+	username, err := s.extractUsername(stream.Context())
+	if err != nil {
+		return err
+	}
 
 	for {
-		update, err := s.GetStatusFn(req.TaskId)
+		update, err := s.GetStatusFn(username, req.TaskId)
 		if err != nil {
 			return status.Errorf(codes.NotFound, "task not found: %v", err)
 		}
@@ -26,6 +30,10 @@ func (s *AgentService) GetSyncStatus(req *agentpbv1.GetSyncStatusRequest, stream
 		if update.Phase == "COMPLETED" || update.Phase == "FAILED" {
 			return nil
 		}
-		time.Sleep(1 * time.Second)
+		select {
+		case <-stream.Context().Done():
+			return status.FromContextError(stream.Context().Err()).Err()
+		case <-time.After(time.Second):
+		}
 	}
 }

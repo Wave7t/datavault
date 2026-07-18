@@ -70,6 +70,42 @@ func UpdateTaskPhase(db *sql.DB, taskID, phase, statsJSON string) error {
 	return nil
 }
 
+// UpdateTaskFailure records a terminal failure with a diagnostic suitable for
+// the local status API and an operator's incident investigation.
+func UpdateTaskFailure(db *sql.DB, taskID, reason string) error {
+	if reason == "" {
+		reason = "task failed"
+	}
+	_, err := db.Exec(`
+		UPDATE task_history
+		SET phase = 'FAILED', error = ?, ended_at = ?
+		WHERE task_id = ?
+	`, reason, time.Now().Unix(), taskID)
+	if err != nil {
+		return fmt.Errorf("update task failure: %w", err)
+	}
+	return nil
+}
+
+// FailIncompleteTasks marks work that was in progress when the Agent stopped
+// as failed. A sync cannot be safely resumed from its in-memory tracker after
+// restart, so leaving these rows in PENDING/SCANNING/TRANSFERRING would make
+// status clients wait forever and misrepresent the backup as active.
+func FailIncompleteTasks(db *sql.DB, reason string) error {
+	if reason == "" {
+		reason = "agent stopped before task completed"
+	}
+	_, err := db.Exec(`
+		UPDATE task_history
+		SET phase = 'FAILED', error = ?, ended_at = ?
+		WHERE phase NOT IN ('COMPLETED', 'FAILED')
+	`, reason, time.Now().Unix())
+	if err != nil {
+		return fmt.Errorf("fail incomplete tasks: %w", err)
+	}
+	return nil
+}
+
 // GetTask retrieves a task record by its ID.
 // Returns nil, nil if no matching task exists.
 func GetTask(db *sql.DB, taskID string) (*TaskRecord, error) {
@@ -78,7 +114,23 @@ func GetTask(db *sql.DB, taskID string) (*TaskRecord, error) {
 		       COALESCE(error,''), started_at, COALESCE(ended_at,0)
 		FROM task_history WHERE task_id = ?
 	`, taskID)
+	return scanTask(row)
+}
 
+// GetLatestTaskForUser retrieves the most recently started task for a user.
+// It lets the local CLI resolve an omitted task ID after an Agent restart,
+// when no in-memory progress tracker remains.
+func GetLatestTaskForUser(db *sql.DB, username string) (*TaskRecord, error) {
+	row := db.QueryRow(`
+		SELECT task_id, server_id, username, phase, COALESCE(stats_json,''),
+		       COALESCE(error,''), started_at, COALESCE(ended_at,0)
+		FROM task_history WHERE username = ?
+		ORDER BY started_at DESC, task_id DESC LIMIT 1
+	`, username)
+	return scanTask(row)
+}
+
+func scanTask(row *sql.Row) (*TaskRecord, error) {
 	var t TaskRecord
 	err := row.Scan(&t.TaskID, &t.ServerID, &t.Username, &t.Phase,
 		&t.StatsJSON, &t.Error, &t.StartedAt, &t.EndedAt)

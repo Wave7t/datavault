@@ -51,21 +51,28 @@ Implemented and covered by tests:
 - Incremental scan/diff based on local SQLite snapshots.
 - Batched backup push with real file contents and delete markers.
 - `_machine` sync path for agent `machine_rules` using mTLS-only server authentication.
+- User sync batches signed by the invoking CLI user's SSH agent. The CLI
+  forwards its socket path over the local Unix socket; the root Agent verifies
+  that the socket is owned by that authenticated peer before requesting each
+  signature.
 - Quota query through `dvault quota` with CLI-side SSH signing.
 - Full restore of latest server data through `dvault restore` with CLI-side SSH signing and local path validation.
 - Server-side ZFS dataset/quota/snapshot helpers.
 - Explicit CA trust stores for both sides of the mTLS connection.
 - Archive-path namespacing across multiple configured backup roots, with file-mode change detection.
+- Bounded retry classification for transient backup-server failures, with persisted failure reasons.
+- Upload bandwidth limiting, scheduled machine-backup windows, task-failure hooks, and quota-warning hooks.
+- Standard mTLS-protected gRPC health checking plus local private-PKI provisioning through `dvault cert`.
+- Challenge-aware server selection for quota and restore requests.
 
 Important limitations:
 
-- User backup batch signing is still performed by the agent process after scanning/packing. The design target is CLI-side signing for all user-authorized operations; quota and restore already follow that model, but sync still needs a protocol redesign.
-- Certificate/CA provisioning commands described in the design spec are not implemented as CLI subcommands.
-- Retry classification, failure hooks, bandwidth limiting, and scheduler time-window enforcement are only partially represented or not wired through the main sync path.
-- Restore currently reads from the first configured server; it does not automatically fail over to later servers.
-- The current `FileEntry` protocol cannot transfer a single file over 15 MiB; supporting large-file chunking needs a protocol revision.
+- A restore cannot transparently move to a different server after the CLI has signed a nonce: each server owns its nonce store. The Agent selects a reachable configured server for the initial challenge, but a mid-restore failover requires a new signed authorization.
+- User schedules remain manual because user backups require the invoking user's live `SSH_AUTH_SOCK`; only machine rules can safely be scheduled without storing user signing keys.
+- The project exposes readiness and hook integration but does not embed a metrics backend, alert delivery service, or centralized log collector.
+- Large files are transferred as ordered, bounded chunks and committed atomically on the server; all peers must run a release that supports the current chunked `FileEntry` protocol.
 - The systemd unit files are provided as deployment templates and may need adjustment for your init environment.
-- The server unit permits writes to the default ZFS mount `/tank/backups`; if `backup_pool` mounts elsewhere, adjust `ReadWritePaths` before enabling the unit.
+- The server resolves the ZFS dataset mount point at startup. If it differs from `/tank/backups`, adjust the server unit's `ReadWritePaths` before enabling it.
 
 ## Prerequisites
 
@@ -80,7 +87,8 @@ Runtime:
 - Linux.
 - ZFS tools available on the server host.
 - mTLS certificates for agent/server gRPC.
-- An SSH agent with an authorized user key for user operations that require signatures (`quota`, `restore`, and eventually full user sync authorization).
+- An SSH agent with an authorized user key for signed user operations (`sync`,
+  `quota`, and `restore`).
 - Server-side authorized keys under `/etc/datavault/server/authorized_keys/<hostname>/<username>.pub`.
 
 ## Build and Test
@@ -111,6 +119,16 @@ sudo make install
 Before connecting to a ZFS-backed test server, follow the
 [server formal-test preflight](docs/server-test-preflight.md).
 
+Provision the private mTLS PKI as root:
+
+```bash
+dvault cert init-ca
+dvault cert issue --server --common-name backup-01.example.com --dns backup-01.example.com \
+  --cert /etc/datavault/server/cert.pem --key /etc/datavault/server/key.pem
+dvault cert issue --client --common-name web-01 \
+  --cert /etc/datavault/agent/cert.pem --key /etc/datavault/agent/key.pem
+```
+
 `make install` copies binaries into `/usr/bin` and installs the sample systemd units from `scripts/`.
 
 For the full local quality gate used by GitHub Actions, run:
@@ -133,6 +151,9 @@ agent:
 
 servers:
   - address: "backup-01.example.com:8443"
+    # Optional when address already matches a DNS/IP SAN. Required when
+    # connecting through a load-balancer name, container alias, or IP address.
+    tls_server_name: "backup-01.example.com"
 
 machine_rules:
   - name: "app-config"
@@ -151,6 +172,14 @@ retry:
 hooks:
   on_task_failed: "/usr/local/bin/datavault-alert.sh"
   on_quota_warning: "/usr/local/bin/datavault-quota-warn.sh"
+
+bandwidth_limit_bytes_per_second: 52428800
+quota_warning_percent: 85
+
+# Applies to cron-triggered machine rules only; supports overnight windows.
+schedule_window:
+  start: "22:00"
+  end: "06:00"
 ```
 
 Agent defaults:

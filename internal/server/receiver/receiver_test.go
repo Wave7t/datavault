@@ -57,3 +57,38 @@ func TestReadAllReportsMissingDataset(t *testing.T) {
 		t.Fatalf("ReadAll error = %v, want not-exist error", err)
 	}
 }
+
+func TestReadAllFromRequiresAbsoluteMount(t *testing.T) {
+	err := New(t.TempDir()).ReadAllFrom("relative", func(string, []byte, uint32) error { return nil })
+	if err == nil {
+		t.Fatal("expected relative clone mount point to fail")
+	}
+}
+
+func TestChunkWriterCommitsAtomically(t *testing.T) {
+	mount := t.TempDir()
+	r := New(mount)
+	writer, err := r.NewChunkWriter("host", "alice", "large/data.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Write([]byte("alpha")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Write([]byte("beta")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(mount, "host", "alice", "large", "data.bin")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("incomplete chunk file became visible: %v", err)
+	}
+	if err := writer.Commit(0600); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(mount, "host", "alice", "large", "data.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "alphabeta" {
+		t.Fatalf("chunked content=%q", data)
+	}
+}

@@ -2,7 +2,9 @@
 package scheduler
 
 import (
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/robfig/cron/v3"
 )
@@ -11,6 +13,36 @@ type Scheduler struct {
 	cron *cron.Cron
 	mu   sync.Mutex
 	jobs map[string]cron.EntryID
+}
+
+// WithinWindow reports whether now is inside a local-time [start,end)
+// execution window. A window crossing midnight, such as 22:00-06:00, is
+// supported. Empty values are rejected so a configuration error cannot turn
+// into an unexpected all-day backup window.
+func WithinWindow(now time.Time, start, end string) (bool, error) {
+	parse := func(value string) (int, error) {
+		t, err := time.Parse("15:04", value)
+		if err != nil {
+			return 0, err
+		}
+		return t.Hour()*60 + t.Minute(), nil
+	}
+	startMinute, err := parse(start)
+	if err != nil {
+		return false, fmt.Errorf("parse window start: %w", err)
+	}
+	endMinute, err := parse(end)
+	if err != nil {
+		return false, fmt.Errorf("parse window end: %w", err)
+	}
+	if startMinute == endMinute {
+		return false, fmt.Errorf("window start and end must differ")
+	}
+	minute := now.Hour()*60 + now.Minute()
+	if startMinute < endMinute {
+		return minute >= startMinute && minute < endMinute, nil
+	}
+	return minute >= startMinute || minute < endMinute, nil
 }
 
 type Job struct {

@@ -43,14 +43,43 @@ func TestLoadServerConfigDefaults(t *testing.T) {
 	path := filepath.Join(dir, "config.yaml")
 	os.WriteFile(path, []byte(`
 server:
+  cert_file: /etc/datavault/server/cert.pem
+  key_file: /etc/datavault/server/key.pem
+  ca_file: /etc/datavault/server/ca.pem
   backup_pool: tank/backups
+allowed_hosts:
+  - cn: web-01.example.com
 `), 0644)
 
-	cfg, _ := LoadServerConfig(path)
+	cfg, err := LoadServerConfig(path)
+	if err != nil {
+		t.Fatalf("LoadServerConfig: %v", err)
+	}
 	if cfg.Server.Listen != "0.0.0.0:8443" {
 		t.Fatalf("default listen: got %q", cfg.Server.Listen)
 	}
 	if cfg.UserPolicy.DefaultSchedule != "30 3 * * *" {
 		t.Fatalf("default schedule: got %q", cfg.UserPolicy.DefaultSchedule)
+	}
+}
+
+func TestLoadServerConfigRejectsUnsafePolicy(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(`
+server:
+  cert_file: /etc/datavault/server/cert.pem
+  key_file: /etc/datavault/server/key.pem
+  ca_file: /etc/datavault/server/ca.pem
+  backup_pool: tank/backups
+allowed_hosts:
+  - cn: web-01.example.com
+snapshot_policy:
+  min_snapshots: 3
+  max_snapshots: 2
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadServerConfig(path); err == nil {
+		t.Fatal("expected unsafe snapshot retention policy to be rejected")
 	}
 }

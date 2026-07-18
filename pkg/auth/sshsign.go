@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"syscall"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
@@ -17,7 +19,41 @@ func SignWithSSHAgent(payload []byte) ([]byte, *ssh.Signature, error) {
 	if socket == "" {
 		return nil, nil, fmt.Errorf("SSH_AUTH_SOCK not set")
 	}
+	return signWithSSHAgentSocket(socket, payload)
+}
 
+// SignWithSSHAgentForUser signs payload through an SSH agent socket supplied
+// by a Unix-socket peer. The socket must be absolute, a Unix-domain socket,
+// and owned by that authenticated peer; this keeps the root-run Agent from
+// accepting an arbitrary IPC endpoint on behalf of another local user.
+func SignWithSSHAgentForUser(socket string, uid uint32, payload []byte) ([]byte, *ssh.Signature, error) {
+	if err := ValidateSSHAgentSocketForUser(socket, uid); err != nil {
+		return nil, nil, err
+	}
+	return signWithSSHAgentSocket(socket, payload)
+}
+
+// ValidateSSHAgentSocketForUser verifies that socket is an absolute Unix
+// socket owned by the authenticated local peer.
+func ValidateSSHAgentSocketForUser(socket string, uid uint32) error {
+	if !filepath.IsAbs(socket) {
+		return fmt.Errorf("SSH agent socket must be an absolute path")
+	}
+	info, err := os.Stat(socket)
+	if err != nil {
+		return fmt.Errorf("stat SSH agent socket: %w", err)
+	}
+	if info.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("SSH agent path is not a Unix socket")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != uid {
+		return fmt.Errorf("SSH agent socket is not owned by authenticated user")
+	}
+	return nil
+}
+
+func signWithSSHAgentSocket(socket string, payload []byte) ([]byte, *ssh.Signature, error) {
 	conn, err := net.Dial("unix", socket)
 	if err != nil {
 		return nil, nil, fmt.Errorf("connect to ssh-agent: %w", err)

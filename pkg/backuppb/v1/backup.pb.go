@@ -463,10 +463,13 @@ func (x *BackupBatch) GetNonce() []byte {
 
 type FileEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`        // relative path within the backup root
-	Content       []byte                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`  // file contents
-	Mode          uint32                 `protobuf:"varint,3,opt,name=mode,proto3" json:"mode,omitempty"`       // file mode bits
-	Deleted       bool                   `protobuf:"varint,4,opt,name=deleted,proto3" json:"deleted,omitempty"` // true = file was deleted, remove on server
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`                                   // relative path within the backup root
+	Content       []byte                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`                             // file contents
+	Mode          uint32                 `protobuf:"varint,3,opt,name=mode,proto3" json:"mode,omitempty"`                                  // file mode bits
+	Deleted       bool                   `protobuf:"varint,4,opt,name=deleted,proto3" json:"deleted,omitempty"`                            // true = file was deleted, remove on server
+	Chunked       bool                   `protobuf:"varint,5,opt,name=chunked,proto3" json:"chunked,omitempty"`                            // true when this entry is one part of a large file
+	ChunkOffset   uint64                 `protobuf:"varint,6,opt,name=chunk_offset,json=chunkOffset,proto3" json:"chunk_offset,omitempty"` // byte offset of content within the large file
+	FinalChunk    bool                   `protobuf:"varint,7,opt,name=final_chunk,json=finalChunk,proto3" json:"final_chunk,omitempty"`    // true when this is the final part of a large file
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -525,6 +528,27 @@ func (x *FileEntry) GetMode() uint32 {
 func (x *FileEntry) GetDeleted() bool {
 	if x != nil {
 		return x.Deleted
+	}
+	return false
+}
+
+func (x *FileEntry) GetChunked() bool {
+	if x != nil {
+		return x.Chunked
+	}
+	return false
+}
+
+func (x *FileEntry) GetChunkOffset() uint64 {
+	if x != nil {
+		return x.ChunkOffset
+	}
+	return 0
+}
+
+func (x *FileEntry) GetFinalChunk() bool {
+	if x != nil {
+		return x.FinalChunk
 	}
 	return false
 }
@@ -875,12 +899,16 @@ const file_pkg_backuppb_v1_backup_proto_rawDesc = "" +
 	"\trule_type\x18\x03 \x01(\tR\bruleType\x12*\n" +
 	"\x05files\x18\x04 \x03(\v2\x14.backup.v1.FileEntryR\x05files\x12\x1c\n" +
 	"\tsignature\x18\x05 \x01(\fR\tsignature\x12\x14\n" +
-	"\x05nonce\x18\x06 \x01(\fR\x05nonce\"g\n" +
+	"\x05nonce\x18\x06 \x01(\fR\x05nonce\"\xc5\x01\n" +
 	"\tFileEntry\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\fR\acontent\x12\x12\n" +
 	"\x04mode\x18\x03 \x01(\rR\x04mode\x12\x18\n" +
-	"\adeleted\x18\x04 \x01(\bR\adeleted\"x\n" +
+	"\adeleted\x18\x04 \x01(\bR\adeleted\x12\x18\n" +
+	"\achunked\x18\x05 \x01(\bR\achunked\x12!\n" +
+	"\fchunk_offset\x18\x06 \x01(\x04R\vchunkOffset\x12\x1f\n" +
+	"\vfinal_chunk\x18\a \x01(\bR\n" +
+	"finalChunk\"x\n" +
 	"\bBatchAck\x12\x19\n" +
 	"\bbatch_id\x18\x01 \x01(\tR\abatchId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x14\n" +

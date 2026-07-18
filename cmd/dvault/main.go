@@ -4,11 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"io"
+	"net"
 	"os"
+	"strings"
 
 	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"github.com/example/datavault/pkg/auth"
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
+	"github.com/example/datavault/pkg/pki"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc"
@@ -27,6 +31,9 @@ func main() {
 		Use:   "dvault",
 		Short: "datavault -- Linux cluster incremental backup system",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if strings.HasPrefix(cmd.CommandPath(), "dvault cert ") {
+				return nil
+			}
 			var err error
 			conn, err = grpc.Dial("unix://"+socketPath,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -52,6 +59,7 @@ func main() {
 	rootCmd.AddCommand(quotaCmd())
 	rootCmd.AddCommand(restoreCmd())
 	rootCmd.AddCommand(adminCmd())
+	rootCmd.AddCommand(certCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -144,8 +152,13 @@ func syncCmd() *cobra.Command {
 		Short: "Manually trigger a sync",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ruleName, _ := cmd.Flags().GetString("rule")
+			sshAuthSock := os.Getenv("SSH_AUTH_SOCK")
+			if sshAuthSock == "" {
+				return fmt.Errorf("SSH_AUTH_SOCK is required for user sync")
+			}
 			resp, err := client.TriggerSync(context.Background(), &agentpbv1.TriggerSyncRequest{
-				RuleName: ruleName,
+				RuleName:    ruleName,
+				SshAuthSock: sshAuthSock,
 			})
 			if err != nil {
 				return err
@@ -170,8 +183,11 @@ func syncCmd() *cobra.Command {
 			}
 			for {
 				update, err := stream.Recv()
-				if err != nil {
+				if err == io.EOF {
 					break
+				}
+				if err != nil {
+					return fmt.Errorf("receive sync status: %w", err)
 				}
 				fmt.Printf("\r[%s] %s: %d/%d files transferred (%d B/s)",
 					update.TaskId, update.Phase,
@@ -179,6 +195,9 @@ func syncCmd() *cobra.Command {
 					update.Stats.CurrentRateBps,
 				)
 				if update.Phase == "COMPLETED" || update.Phase == "FAILED" {
+					if update.Error != "" {
+						fmt.Printf(" — %s", update.Error)
+					}
 					fmt.Println()
 					break
 				}
@@ -209,6 +228,7 @@ func quotaCmd() *cobra.Command {
 			usage, err := client.GetQuotaUsage(context.Background(), &agentpbv1.GetQuotaUsageRequest{
 				Nonce:     challenge.Nonce,
 				Signature: signature,
+				Server:    challenge.Server,
 			})
 			if err != nil {
 				return err
@@ -272,6 +292,7 @@ func restoreCmd() *cobra.Command {
 				TargetPath: targetPath,
 				Nonce:      challenge.Nonce,
 				Signature:  signature,
+				Server:     challenge.Server,
 			})
 			if err != nil {
 				return err
@@ -341,5 +362,107 @@ func adminCmd() *cobra.Command {
 	})
 
 	cmd.AddCommand(ruleCmd)
+	return cmd
+}
+
+func certCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "cert",
+		Short: "Provision the private CA and mTLS certificates (requires root)",
+	}
+
+	initCA := &cobra.Command{
+		Use:   "init-ca",
+		Short: "Create a new private certificate authority",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if os.Geteuid() != 0 {
+				return fmt.Errorf("dvault cert init-ca must run as root")
+			}
+			certPath, _ := cmd.Flags().GetString("cert")
+			keyPath, _ := cmd.Flags().GetString("key")
+			commonName, _ := cmd.Flags().GetString("common-name")
+			validFor, _ := cmd.Flags().GetDuration("valid-for")
+			certPEM, keyPEM, err := pki.CreateCA(pki.CAOptions{CommonName: commonName, ValidFor: validFor})
+			if err != nil {
+				return err
+			}
+			if err := pki.WritePair(certPath, keyPath, certPEM, keyPEM); err != nil {
+				return fmt.Errorf("write CA: %w", err)
+			}
+			fmt.Printf("CA certificate: %s\nCA key: %s\n", certPath, keyPath)
+			return nil
+		},
+	}
+	initCA.Flags().String("cert", "/etc/datavault/pki/ca.crt", "CA certificate output path")
+	initCA.Flags().String("key", "/etc/datavault/pki/ca.key", "CA private key output path")
+	initCA.Flags().String("common-name", "datavault private CA", "CA common name")
+	initCA.Flags().Duration("valid-for", pki.DefaultCAValidity, "CA validity")
+
+	issue := &cobra.Command{
+		Use:   "issue",
+		Short: "Issue one mTLS client or server certificate from the private CA",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if os.Geteuid() != 0 {
+				return fmt.Errorf("dvault cert issue must run as root")
+			}
+			caCertPath, _ := cmd.Flags().GetString("ca-cert")
+			caKeyPath, _ := cmd.Flags().GetString("ca-key")
+			certPath, _ := cmd.Flags().GetString("cert")
+			keyPath, _ := cmd.Flags().GetString("key")
+			commonName, _ := cmd.Flags().GetString("common-name")
+			dnsNames, _ := cmd.Flags().GetStringSlice("dns")
+			ipStrings, _ := cmd.Flags().GetStringSlice("ip")
+			clientCert, _ := cmd.Flags().GetBool("client")
+			serverCert, _ := cmd.Flags().GetBool("server")
+			validFor, _ := cmd.Flags().GetDuration("valid-for")
+			caCertPEM, err := os.ReadFile(caCertPath)
+			if err != nil {
+				return fmt.Errorf("read CA certificate: %w", err)
+			}
+			caKeyPEM, err := os.ReadFile(caKeyPath)
+			if err != nil {
+				return fmt.Errorf("read CA key: %w", err)
+			}
+			ips := make([]net.IP, 0, len(ipStrings))
+			for _, value := range ipStrings {
+				ip := net.ParseIP(value)
+				if ip == nil {
+					return fmt.Errorf("invalid --ip value %q", value)
+				}
+				ips = append(ips, ip)
+			}
+			certPEM, keyPEM, err := pki.Issue(caCertPEM, caKeyPEM, pki.IssueOptions{
+				CommonName:  commonName,
+				DNSNames:    dnsNames,
+				IPAddresses: ips,
+				Client:      clientCert,
+				Server:      serverCert,
+				ValidFor:    validFor,
+			})
+			if err != nil {
+				return err
+			}
+			if err := pki.WritePair(certPath, keyPath, certPEM, keyPEM); err != nil {
+				return fmt.Errorf("write issued certificate: %w", err)
+			}
+			fmt.Printf("Certificate: %s\nPrivate key: %s\n", certPath, keyPath)
+			return nil
+		},
+	}
+	issue.Flags().String("ca-cert", "/etc/datavault/pki/ca.crt", "CA certificate path")
+	issue.Flags().String("ca-key", "/etc/datavault/pki/ca.key", "CA private key path")
+	issue.Flags().String("cert", "", "issued certificate output path")
+	issue.Flags().String("key", "", "issued private key output path")
+	issue.Flags().String("common-name", "", "certificate common name")
+	issue.Flags().StringSlice("dns", nil, "server DNS SAN (repeatable)")
+	issue.Flags().StringSlice("ip", nil, "server IP SAN (repeatable)")
+	issue.Flags().Bool("client", false, "issue a client-auth certificate")
+	issue.Flags().Bool("server", false, "issue a server-auth certificate")
+	issue.Flags().Duration("valid-for", pki.DefaultLeafValidity, "certificate validity")
+	_ = issue.MarkFlagRequired("cert")
+	_ = issue.MarkFlagRequired("key")
+	_ = issue.MarkFlagRequired("common-name")
+
+	cmd.AddCommand(initCA, issue)
 	return cmd
 }

@@ -10,7 +10,11 @@ Restart=always
 RestartSec=30
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
-PrivateTmp=yes
+# User-triggered backups sign through SSH_AUTH_SOCK, which normally lives
+# below /tmp/ssh-*. A private /tmp namespace would hide that socket from the
+# root-run Agent, so this must remain disabled unless a shared socket path is
+# explicitly bind-mounted into the service.
+PrivateTmp=no
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/var/lib/datavault/agent /etc/datavault/agent /var/run

@@ -2,8 +2,13 @@
 package retry
 
 import (
+	"errors"
+	"net"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestBackoffIncreases(t *testing.T) {
@@ -20,6 +25,34 @@ func TestBackoffIncreases(t *testing.T) {
 			t.Fatalf("attempt %d: %v < %v (decreased)", i, next, prev)
 		}
 		prev = next
+	}
+}
+
+func TestBackoffDoesNotExceedMaxElapsed(t *testing.T) {
+	b := New(Config{Initial: time.Second, Max: time.Second, Multiplier: 1, MaxElapsed: 1500 * time.Millisecond})
+	if got := b.Next(); got != time.Second {
+		t.Fatalf("first delay=%v, want 1s", got)
+	}
+	if got := b.Next(); got != 0 {
+		t.Fatalf("second delay=%v, want 0 when it exceeds max elapsed", got)
+	}
+}
+
+func TestIsRetryable(t *testing.T) {
+	if !IsRetryable(status.Error(codes.Unavailable, "server unavailable")) {
+		t.Fatal("Unavailable should be retryable")
+	}
+	if IsRetryable(status.Error(codes.PermissionDenied, "denied")) {
+		t.Fatal("PermissionDenied must not be retryable")
+	}
+	if IsRetryable(Permanent(status.Error(codes.Internal, "bad config"))) {
+		t.Fatal("explicit permanent error must not be retryable")
+	}
+	if !IsRetryable(&net.DNSError{IsTemporary: true}) {
+		t.Fatal("temporary DNS error should be retryable")
+	}
+	if IsRetryable(errors.New("local scanner failure")) {
+		t.Fatal("unclassified local error must not be retryable")
 	}
 }
 

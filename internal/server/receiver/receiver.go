@@ -2,6 +2,7 @@ package receiver
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,14 @@ import (
 // All operations include path traversal protection.
 type Receiver struct {
 	MountPoint string // ZFS dataset mount point root
+}
+
+// ChunkWriter stages one large-file upload. The final rename is atomic, so a
+// stream failure never exposes a partially assembled backup file.
+type ChunkWriter struct {
+	targetPath string
+	tmpFile    *os.File
+	committed  bool
 }
 
 // New creates a new Receiver for the given mount point.
@@ -24,6 +33,17 @@ func New(mountPoint string) *Receiver {
 // the iteration.
 func (r *Receiver) ReadAll(hostname, username string, yield func(path string, content []byte, mode uint32) error) error {
 	baseDir := filepath.Join(r.MountPoint, hostname, username)
+	return r.ReadAllFrom(baseDir, yield)
+}
+
+// ReadAllFrom reads every regular file below a trusted dataset mount point.
+// It is used for temporary ZFS clone mounts during restore, while ReadAll
+// retains the normal host/user dataset layout used by live backup writes.
+func (r *Receiver) ReadAllFrom(baseDir string, yield func(path string, content []byte, mode uint32) error) error {
+	if !filepath.IsAbs(baseDir) {
+		return fmt.Errorf("dataset mount point must be absolute: %q", baseDir)
+	}
+	baseDir = filepath.Clean(baseDir)
 
 	return filepath.WalkDir(baseDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -35,12 +55,12 @@ func (r *Receiver) ReadAll(hostname, username string, yield func(path string, co
 
 		relPath, err := filepath.Rel(baseDir, path)
 		if err != nil {
-			return nil // skip
+			return fmt.Errorf("make dataset-relative path for %q: %w", path, err)
 		}
 
 		info, err := d.Info()
 		if err != nil {
-			return nil // skip
+			return fmt.Errorf("stat backup file %q: %w", path, err)
 		}
 		if !info.Mode().IsRegular() {
 			return nil
@@ -48,10 +68,78 @@ func (r *Receiver) ReadAll(hostname, username string, yield func(path string, co
 
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil // skip unreadable files
+			return fmt.Errorf("read backup file %q: %w", path, err)
 		}
 
 		return yield(relPath, data, uint32(info.Mode().Perm()))
+	})
+}
+
+// ReadAllChunksFrom yields large regular files in bounded chunks while small
+// files remain a single entry. It is used by restore so a valid large backup
+// never has to fit in one gRPC message or one server allocation.
+func (r *Receiver) ReadAllChunksFrom(baseDir string, maxChunkBytes int, yield func(path string, content []byte, mode uint32, offset uint64, chunked, final bool) error) error {
+	if !filepath.IsAbs(baseDir) {
+		return fmt.Errorf("dataset mount point must be absolute: %q", baseDir)
+	}
+	if maxChunkBytes <= 0 {
+		return fmt.Errorf("chunk size must be positive")
+	}
+	baseDir = filepath.Clean(baseDir)
+
+	return filepath.WalkDir(baseDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("walk dataset: %w", err)
+		}
+		if d.IsDir() {
+			return nil
+		}
+		relPath, err := filepath.Rel(baseDir, path)
+		if err != nil {
+			return fmt.Errorf("make dataset-relative path for %q: %w", path, err)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return fmt.Errorf("stat backup file %q: %w", path, err)
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("open backup file %q: %w", path, err)
+		}
+		defer file.Close()
+		if info.Size() <= int64(maxChunkBytes) {
+			data, err := io.ReadAll(file)
+			if err != nil {
+				return fmt.Errorf("read backup file %q: %w", path, err)
+			}
+			return yield(relPath, data, uint32(info.Mode().Perm()), 0, false, true)
+		}
+
+		buf := make([]byte, maxChunkBytes)
+		var offset int64
+		for offset < info.Size() {
+			want := int64(len(buf))
+			if remaining := info.Size() - offset; remaining < want {
+				want = remaining
+			}
+			n, readErr := io.ReadFull(file, buf[:want])
+			if readErr != nil && readErr != io.ErrUnexpectedEOF && readErr != io.EOF {
+				return fmt.Errorf("read backup file %q: %w", path, readErr)
+			}
+			if n == 0 || (readErr != nil && offset+int64(n) != info.Size()) {
+				return fmt.Errorf("backup file %q changed while restoring", path)
+			}
+			final := offset+int64(n) == info.Size()
+			if err := yield(relPath, append([]byte(nil), buf[:n]...), uint32(info.Mode().Perm()), uint64(offset), true, final); err != nil {
+				return err
+			}
+			offset += int64(n)
+		}
+		return nil
 	})
 }
 
@@ -91,6 +179,63 @@ func (r *Receiver) WriteFile(hostname, username, relPath string, content []byte,
 	}
 
 	return nil
+}
+
+// NewChunkWriter creates an atomic staging file for a chunked upload.
+func (r *Receiver) NewChunkWriter(hostname, username, relPath string) (*ChunkWriter, error) {
+	targetPath, err := r.targetPath(hostname, username, relPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		return nil, fmt.Errorf("mkdir: %w", err)
+	}
+	tmpFile, err := os.CreateTemp(filepath.Dir(targetPath), ".dvault-chunk-*")
+	if err != nil {
+		return nil, fmt.Errorf("create chunk staging file: %w", err)
+	}
+	return &ChunkWriter{targetPath: targetPath, tmpFile: tmpFile}, nil
+}
+
+// Write appends one ordered chunk to the staged file.
+func (w *ChunkWriter) Write(content []byte) error {
+	if w == nil || w.tmpFile == nil {
+		return fmt.Errorf("chunk writer is closed")
+	}
+	if _, err := w.tmpFile.Write(content); err != nil {
+		return fmt.Errorf("write chunk: %w", err)
+	}
+	return nil
+}
+
+// Commit closes, applies mode, and atomically publishes the full file.
+func (w *ChunkWriter) Commit(mode uint32) error {
+	if w == nil || w.tmpFile == nil {
+		return fmt.Errorf("chunk writer is closed")
+	}
+	if err := w.tmpFile.Close(); err != nil {
+		return fmt.Errorf("close chunk staging file: %w", err)
+	}
+	if err := os.Chmod(w.tmpFile.Name(), os.FileMode(mode&0777)); err != nil {
+		return fmt.Errorf("chmod chunk staging file: %w", err)
+	}
+	if err := os.Rename(w.tmpFile.Name(), w.targetPath); err != nil {
+		return fmt.Errorf("rename chunk staging file: %w", err)
+	}
+	w.tmpFile = nil
+	w.committed = true
+	return nil
+}
+
+// Abort removes an incomplete staging file. It is safe to call after Commit.
+func (w *ChunkWriter) Abort() {
+	if w == nil || w.tmpFile == nil || w.committed {
+		return
+	}
+	name := w.tmpFile.Name()
+	_ = w.tmpFile.Close()
+	_ = os.Remove(name)
+	w.tmpFile = nil
 }
 
 // DeleteFile removes a file from the dataset.

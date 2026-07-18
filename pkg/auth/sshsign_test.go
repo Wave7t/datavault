@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/pem"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
@@ -65,5 +67,19 @@ func TestGenerateNonce(t *testing.T) {
 	}
 	if string(n1) == string(n2) {
 		t.Fatal("two nonces should differ")
+	}
+}
+
+func TestSignWithSSHAgentForUserRejectsUntrustedSocketPath(t *testing.T) {
+	if _, _, err := SignWithSSHAgentForUser("relative.sock", uint32(os.Getuid()), []byte("payload")); err == nil {
+		t.Fatal("expected relative socket path to be rejected")
+	}
+
+	regularFile := filepath.Join(t.TempDir(), "not-a-socket")
+	if err := os.WriteFile(regularFile, []byte("not a socket"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := SignWithSSHAgentForUser(regularFile, uint32(os.Getuid()), []byte("payload")); err == nil {
+		t.Fatal("expected regular file to be rejected as an SSH agent socket")
 	}
 }

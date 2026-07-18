@@ -57,6 +57,9 @@ message FileEntry {
   bytes content = 2; // file contents
   uint32 mode = 3; // file mode bits
   bool deleted = 4; // true = file was deleted, remove on server
+  bool chunked = 5; // true when this entry is one part of a large file
+  uint64 chunk_offset = 6; // byte offset of content within the large file
+  bool final_chunk = 7; // true when this is the final part of a large file
 }
 
 message BatchAck {

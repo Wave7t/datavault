@@ -68,6 +68,27 @@ func TestUpdateTaskPhaseFailed(t *testing.T) {
 	}
 }
 
+func TestUpdateTaskFailureStoresReason(t *testing.T) {
+	db := testDB(t)
+	defer db.Close()
+	if err := MigrateTasks(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := InsertTask(db, TaskRecord{TaskID: "task-failure", ServerID: "srv", Username: "alice"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpdateTaskFailure(db, "task-failure", "server unavailable after retries"); err != nil {
+		t.Fatal(err)
+	}
+	task, err := GetTask(db, "task-failure")
+	if err != nil || task == nil {
+		t.Fatalf("GetTask: task=%#v err=%v", task, err)
+	}
+	if task.Phase != "FAILED" || task.Error != "server unavailable after retries" || task.EndedAt == 0 {
+		t.Fatalf("unexpected failed task: %#v", task)
+	}
+}
+
 func TestUpdateTaskPhaseRunning(t *testing.T) {
 	db := testDB(t)
 	defer db.Close()
@@ -98,5 +119,69 @@ func TestGetTaskNotFound(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatal("expected nil for nonexistent task")
+	}
+}
+
+func TestGetLatestTaskForUser(t *testing.T) {
+	db := testDB(t)
+	defer db.Close()
+	if err := MigrateTasks(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := InsertTask(db, TaskRecord{TaskID: "alice-1", ServerID: "server", Username: "alice"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := InsertTask(db, TaskRecord{TaskID: "bob-1", ServerID: "server", Username: "bob"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := InsertTask(db, TaskRecord{TaskID: "alice-2", ServerID: "server", Username: "alice"}); err != nil {
+		t.Fatal(err)
+	}
+
+	task, err := GetLatestTaskForUser(db, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task == nil || task.TaskID != "alice-2" {
+		t.Fatalf("latest task = %#v, want alice-2", task)
+	}
+}
+
+func TestFailIncompleteTasks(t *testing.T) {
+	db := testDB(t)
+	defer db.Close()
+	if err := MigrateTasks(db); err != nil {
+		t.Fatal(err)
+	}
+	for _, task := range []TaskRecord{
+		{TaskID: "pending", ServerID: "server", Username: "alice"},
+		{TaskID: "scanning", ServerID: "server", Username: "alice"},
+		{TaskID: "complete", ServerID: "server", Username: "alice"},
+	} {
+		if err := InsertTask(db, task); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := UpdateTaskPhase(db, "scanning", "SCANNING", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpdateTaskPhase(db, "complete", "COMPLETED", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := FailIncompleteTasks(db, "agent restarted"); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"pending", "scanning"} {
+		task, err := GetTask(db, id)
+		if err != nil || task == nil {
+			t.Fatalf("get %q: task=%#v err=%v", id, task, err)
+		}
+		if task.Phase != "FAILED" || task.EndedAt == 0 || task.Error != "agent restarted" {
+			t.Fatalf("interrupted task %q = %#v", id, task)
+		}
+	}
+	completed, err := GetTask(db, "complete")
+	if err != nil || completed.Phase != "COMPLETED" {
+		t.Fatalf("completed task changed: task=%#v err=%v", completed, err)
 	}
 }

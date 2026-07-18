@@ -771,7 +771,8 @@ func (x *ListMachineRulesResponse) GetRules() []*Rule {
 
 type TriggerSyncRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	RuleName      string                 `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"` // empty = all rules
+	RuleName      string                 `protobuf:"bytes,1,opt,name=rule_name,json=ruleName,proto3" json:"rule_name,omitempty"`            // empty = all rules
+	SshAuthSock   string                 `protobuf:"bytes,2,opt,name=ssh_auth_sock,json=sshAuthSock,proto3" json:"ssh_auth_sock,omitempty"` // caller-owned SSH agent socket for user-batch signing
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -809,6 +810,13 @@ func (*TriggerSyncRequest) Descriptor() ([]byte, []int) {
 func (x *TriggerSyncRequest) GetRuleName() string {
 	if x != nil {
 		return x.RuleName
+	}
+	return ""
+}
+
+func (x *TriggerSyncRequest) GetSshAuthSock() string {
+	if x != nil {
+		return x.SshAuthSock
 	}
 	return ""
 }
@@ -909,6 +917,7 @@ type SyncStatusUpdate struct {
 	Phase         string                 `protobuf:"bytes,4,opt,name=phase,proto3" json:"phase,omitempty"` // SCANNING, TRANSFERRING, COMPLETED, FAILED
 	Stats         *SyncStats             `protobuf:"bytes,5,opt,name=stats,proto3" json:"stats,omitempty"`
 	CurrentFiles  []string               `protobuf:"bytes,6,rep,name=current_files,json=currentFiles,proto3" json:"current_files,omitempty"` // files in current batch
+	Error         string                 `protobuf:"bytes,7,opt,name=error,proto3" json:"error,omitempty"`                                   // terminal failure diagnostic, if any
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -983,6 +992,13 @@ func (x *SyncStatusUpdate) GetCurrentFiles() []string {
 		return x.CurrentFiles
 	}
 	return nil
+}
+
+func (x *SyncStatusUpdate) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
 }
 
 type SyncStats struct {
@@ -1185,6 +1201,7 @@ type GetQuotaUsageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Nonce         []byte                 `protobuf:"bytes,1,opt,name=nonce,proto3" json:"nonce,omitempty"`
 	Signature     []byte                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
+	Server        string                 `protobuf:"bytes,3,opt,name=server,proto3" json:"server,omitempty"` // server returned by GetAuthChallenge
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1231,6 +1248,13 @@ func (x *GetQuotaUsageRequest) GetSignature() []byte {
 		return x.Signature
 	}
 	return nil
+}
+
+func (x *GetQuotaUsageRequest) GetServer() string {
+	if x != nil {
+		return x.Server
+	}
+	return ""
 }
 
 type QuotaUsage struct {
@@ -1306,6 +1330,7 @@ type RequestRestoreRequest struct {
 	TargetPath    string                 `protobuf:"bytes,1,opt,name=target_path,json=targetPath,proto3" json:"target_path,omitempty"` // empty = ~/restored/
 	Nonce         []byte                 `protobuf:"bytes,2,opt,name=nonce,proto3" json:"nonce,omitempty"`
 	Signature     []byte                 `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
+	Server        string                 `protobuf:"bytes,4,opt,name=server,proto3" json:"server,omitempty"` // server returned by GetAuthChallenge
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1359,6 +1384,13 @@ func (x *RequestRestoreRequest) GetSignature() []byte {
 		return x.Signature
 	}
 	return nil
+}
+
+func (x *RequestRestoreRequest) GetServer() string {
+	if x != nil {
+		return x.Server
+	}
+	return ""
 }
 
 type RequestRestoreResponse struct {
@@ -1443,20 +1475,22 @@ const file_pkg_agentpb_v1_agent_proto_rawDesc = "" +
 	"\x19RemoveMachineRuleResponse\"\x19\n" +
 	"\x17ListMachineRulesRequest\"@\n" +
 	"\x18ListMachineRulesResponse\x12$\n" +
-	"\x05rules\x18\x01 \x03(\v2\x0e.agent.v1.RuleR\x05rules\"1\n" +
+	"\x05rules\x18\x01 \x03(\v2\x0e.agent.v1.RuleR\x05rules\"U\n" +
 	"\x12TriggerSyncRequest\x12\x1b\n" +
-	"\trule_name\x18\x01 \x01(\tR\bruleName\".\n" +
+	"\trule_name\x18\x01 \x01(\tR\bruleName\x12\"\n" +
+	"\rssh_auth_sock\x18\x02 \x01(\tR\vsshAuthSock\".\n" +
 	"\x13TriggerSyncResponse\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\"/\n" +
 	"\x14GetSyncStatusRequest\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\tR\x06taskId\"\xc5\x01\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\"\xdb\x01\n" +
 	"\x10SyncStatusUpdate\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x16\n" +
 	"\x06server\x18\x03 \x01(\tR\x06server\x12\x14\n" +
 	"\x05phase\x18\x04 \x01(\tR\x05phase\x12)\n" +
 	"\x05stats\x18\x05 \x01(\v2\x13.agent.v1.SyncStatsR\x05stats\x12#\n" +
-	"\rcurrent_files\x18\x06 \x03(\tR\fcurrentFiles\"\xfa\x01\n" +
+	"\rcurrent_files\x18\x06 \x03(\tR\fcurrentFiles\x12\x14\n" +
+	"\x05error\x18\a \x01(\tR\x05error\"\xfa\x01\n" +
 	"\tSyncStats\x12\x1f\n" +
 	"\vtotal_files\x18\x01 \x01(\x03R\n" +
 	"totalFiles\x12#\n" +
@@ -1472,10 +1506,11 @@ const file_pkg_agentpb_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"expires_at\x18\x02 \x01(\x03R\texpiresAt\x12\x16\n" +
 	"\x06server\x18\x03 \x01(\tR\x06server\x12\x1a\n" +
-	"\busername\x18\x04 \x01(\tR\busername\"J\n" +
+	"\busername\x18\x04 \x01(\tR\busername\"b\n" +
 	"\x14GetQuotaUsageRequest\x12\x14\n" +
 	"\x05nonce\x18\x01 \x01(\fR\x05nonce\x12\x1c\n" +
-	"\tsignature\x18\x02 \x01(\fR\tsignature\"~\n" +
+	"\tsignature\x18\x02 \x01(\fR\tsignature\x12\x16\n" +
+	"\x06server\x18\x03 \x01(\tR\x06server\"~\n" +
 	"\n" +
 	"QuotaUsage\x12\x1d\n" +
 	"\n" +
@@ -1483,12 +1518,13 @@ const file_pkg_agentpb_v1_agent_proto_rawDesc = "" +
 	"\vquota_bytes\x18\x02 \x01(\x03R\n" +
 	"quotaBytes\x12\x18\n" +
 	"\adataset\x18\x03 \x01(\tR\adataset\x12\x16\n" +
-	"\x06server\x18\x04 \x01(\tR\x06server\"l\n" +
+	"\x06server\x18\x04 \x01(\tR\x06server\"\x84\x01\n" +
 	"\x15RequestRestoreRequest\x12\x1f\n" +
 	"\vtarget_path\x18\x01 \x01(\tR\n" +
 	"targetPath\x12\x14\n" +
 	"\x05nonce\x18\x02 \x01(\fR\x05nonce\x12\x1c\n" +
-	"\tsignature\x18\x03 \x01(\fR\tsignature\"1\n" +
+	"\tsignature\x18\x03 \x01(\fR\tsignature\x12\x16\n" +
+	"\x06server\x18\x04 \x01(\tR\x06server\"1\n" +
 	"\x16RequestRestoreResponse\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId2\xc3\b\n" +
 	"\fAgentService\x12J\n" +

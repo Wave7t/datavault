@@ -12,9 +12,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/example/datavault/internal/server/middleware"
+	"github.com/example/datavault/internal/server/receiver"
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 	"github.com/example/datavault/pkg/store"
 	"github.com/example/datavault/pkg/zfs"
@@ -41,7 +41,12 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 	var ruleType string
 	firstBatch := true
 	nonceConsumed := false
-	totalWritten := int64(0)
+	partialUploads := make(map[string]*partialUpload)
+	defer func() {
+		for _, upload := range partialUploads {
+			upload.writer.Abort()
+		}
+	}()
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -106,6 +111,26 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 		// --- Write files from this batch ---
 		written := int64(0)
 		for _, f := range batch.Files {
+			if f.Chunked {
+				if f.Deleted {
+					return status.Error(codes.InvalidArgument, "chunked file may not be a delete marker")
+				}
+				upload, err := s.writeChunk(hostname, username, f, partialUploads)
+				if err != nil {
+					return status.Errorf(codes.Internal, "write chunk %q: %v", f.Path, err)
+				}
+				if f.FinalChunk {
+					if err := upload.writer.Commit(f.Mode); err != nil {
+						return status.Errorf(codes.Internal, "commit chunked file %q: %v", f.Path, err)
+					}
+					delete(partialUploads, f.Path)
+				}
+				written += int64(len(f.Content))
+				continue
+			}
+			if _, exists := partialUploads[f.Path]; exists {
+				return status.Errorf(codes.InvalidArgument, "file %q has an unfinished chunked upload", f.Path)
+			}
 			if f.Deleted {
 				if err := s.Receiver.DeleteFile(hostname, username, f.Path); err != nil {
 					return status.Errorf(codes.Internal, "delete %q: %v", f.Path, err)
@@ -117,8 +142,6 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 				written += int64(len(f.Content))
 			}
 		}
-		totalWritten += written
-
 		// Ack this batch
 		if err := stream.Send(&backuppbv1.BatchAck{
 			BatchId:      batch.BatchId,
@@ -130,6 +153,9 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 	}
 
 	// --- Completion: snapshot and cleanup ---
+	if len(partialUploads) != 0 {
+		return status.Error(codes.InvalidArgument, "backup stream ended with incomplete chunked upload")
+	}
 	if username != "" {
 		if err := ctx.Err(); err != nil {
 			return status.FromContextError(err).Err()
@@ -137,20 +163,50 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 		dsName := zfs.DatasetPath(s.Cfg.Server.BackupPool, hostname, username)
 		snapName, err := s.ZFS.CreateSnapshot(dsName)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "snapshot failed for %s/%s: %v\n", hostname, username, err)
-		} else {
-			fmt.Fprintf(os.Stderr, "snapshot created: %s (%d bytes written)\n", snapName, totalWritten)
-			if err := s.ZFS.CleanupSnapshots(dsName,
-				s.Cfg.SnapshotPolicy.MinSnapshots,
-				s.Cfg.SnapshotPolicy.MaxSnapshots,
-				s.Cfg.SnapshotPolicy.MinFreeGB,
-			); err != nil {
-				fmt.Fprintf(os.Stderr, "snapshot cleanup failed for %s/%s: %v\n", hostname, username, err)
-			}
+			return status.Errorf(codes.Internal, "create recovery snapshot %q: %v", dsName, err)
+		}
+		if err := s.ZFS.CleanupSnapshots(dsName,
+			s.Cfg.SnapshotPolicy.MinSnapshots,
+			s.Cfg.SnapshotPolicy.MaxSnapshots,
+			s.Cfg.SnapshotPolicy.MinFreeGB,
+		); err != nil {
+			return status.Errorf(codes.Internal, "clean up recovery snapshots %q: %v", snapName, err)
 		}
 	}
 
 	return nil
+}
+
+type partialUpload struct {
+	writer     *receiver.ChunkWriter
+	nextOffset uint64
+	mode       uint32
+}
+
+func (s *BackupServer) writeChunk(hostname, username string, file *backuppbv1.FileEntry, uploads map[string]*partialUpload) (*partialUpload, error) {
+	upload, exists := uploads[file.Path]
+	if !exists {
+		if file.ChunkOffset != 0 {
+			return nil, fmt.Errorf("first chunk offset is %d, want 0", file.ChunkOffset)
+		}
+		writer, err := s.Receiver.NewChunkWriter(hostname, username, file.Path)
+		if err != nil {
+			return nil, err
+		}
+		upload = &partialUpload{writer: writer, mode: file.Mode}
+		uploads[file.Path] = upload
+	}
+	if file.ChunkOffset != upload.nextOffset {
+		return nil, fmt.Errorf("chunk offset is %d, want %d", file.ChunkOffset, upload.nextOffset)
+	}
+	if file.Mode != upload.mode {
+		return nil, fmt.Errorf("chunk mode changed from %#o to %#o", upload.mode, file.Mode)
+	}
+	if err := upload.writer.Write(file.Content); err != nil {
+		return nil, err
+	}
+	upload.nextOffset += uint64(len(file.Content))
+	return upload, nil
 }
 
 func validateBackupIdentity(batch *backuppbv1.BackupBatch) error {

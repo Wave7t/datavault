@@ -64,7 +64,7 @@ func TestRestoreFromStreamWritesThenRenames(t *testing.T) {
 		{IsLast: true},
 	}}
 
-	if err := restoreFromStream(stream, target, progress.NewTracker()); err != nil {
+	if err := restoreFromStream(stream, target, uint32(os.Getuid()), progress.NewTracker()); err != nil {
 		t.Fatalf("restoreFromStream: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(target, "dir", "a.txt"))
@@ -80,6 +80,25 @@ func TestWriteRestoredFileRejectsTraversal(t *testing.T) {
 	err := writeRestoredFile(t.TempDir(), &backuppbv1.FileEntry{Path: "../evil", Content: []byte("x"), Mode: 0644})
 	if err == nil {
 		t.Fatal("expected traversal error")
+	}
+}
+
+func TestRestoreFromStreamReassemblesChunks(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "restored")
+	stream := &fakeRestoreStream{batches: []*backuppbv1.RestoreBatch{
+		{Files: []*backuppbv1.FileEntry{{Path: "large.bin", Content: []byte("alpha"), Mode: 0600, Chunked: true, ChunkOffset: 0}}},
+		{Files: []*backuppbv1.FileEntry{{Path: "large.bin", Content: []byte("beta"), Mode: 0600, Chunked: true, ChunkOffset: 5, FinalChunk: true}}},
+		{IsLast: true},
+	}}
+	if err := restoreFromStream(stream, target, uint32(os.Getuid()), progress.NewTracker()); err != nil {
+		t.Fatalf("restoreFromStream: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(target, "large.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "alphabeta" {
+		t.Fatalf("chunked restore content=%q", data)
 	}
 }
 

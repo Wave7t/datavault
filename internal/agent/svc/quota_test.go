@@ -13,10 +13,13 @@ func TestGetQuotaUsageUsesPeerUser(t *testing.T) {
 	ctx := auth.ContextWithPeerUID(context.Background(), uint32(os.Getuid()))
 	called := false
 	service := &AgentService{
-		GetQuotaUsageFn: func(username string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error) {
+		GetQuotaUsageFn: func(username, server string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error) {
 			called = true
 			if username == "" {
 				t.Fatal("expected username")
+			}
+			if server != "server:8443" {
+				t.Fatalf("unexpected server %q", server)
 			}
 			if string(nonce) != "nonce" || string(signature) != "signature" {
 				t.Fatalf("unexpected auth material: %q/%q", nonce, signature)
@@ -25,7 +28,7 @@ func TestGetQuotaUsageUsesPeerUser(t *testing.T) {
 		},
 	}
 
-	usage, err := service.GetQuotaUsage(ctx, &agentpbv1.GetQuotaUsageRequest{Nonce: []byte("nonce"), Signature: []byte("signature")})
+	usage, err := service.GetQuotaUsage(ctx, &agentpbv1.GetQuotaUsageRequest{Nonce: []byte("nonce"), Signature: []byte("signature"), Server: "server:8443"})
 	if err != nil {
 		t.Fatalf("GetQuotaUsage: %v", err)
 	}

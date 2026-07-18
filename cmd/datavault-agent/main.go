@@ -10,6 +10,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/example/datavault/internal/agent/orchestrator"
 	"github.com/example/datavault/internal/agent/pool"
@@ -25,8 +27,10 @@ import (
 	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"github.com/example/datavault/pkg/auth"
 	"github.com/example/datavault/pkg/config"
+	"github.com/example/datavault/pkg/hooks"
 	"github.com/example/datavault/pkg/rules"
 	"github.com/example/datavault/pkg/store"
+	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc"
 )
 
@@ -55,6 +59,9 @@ func main() {
 	if err := store.MigrateTasks(db); err != nil {
 		log.Fatalf("migrate tasks: %v", err)
 	}
+	if err := store.FailIncompleteTasks(db, "agent restarted before task completed"); err != nil {
+		log.Fatalf("finalize interrupted tasks: %v", err)
+	}
 
 	// User rule store (per-user YAML files).
 	userRuleStore := rules.NewUserRuleStore(*rulesDir)
@@ -68,6 +75,11 @@ func main() {
 
 	// Orchestrator coordinates scan -> diff -> push pipeline.
 	orch := orchestrator.New(cfg, connPool, db, userRuleStore)
+	orch.SetFailureHook(func(event hooks.TaskFailure) {
+		if err := hooks.RunTaskFailed(context.Background(), cfg.Hooks.OnTaskFailed, event); err != nil {
+			log.Printf("run task failure hook: %v", err)
+		}
+	})
 
 	// Cron scheduler for machine-level backup rules.
 	sched := scheduler.New()
@@ -80,6 +92,17 @@ func main() {
 			Name:     "machine-" + ruleName,
 			Schedule: rule.Schedule,
 			Fn: func() {
+				if window := cfg.ScheduleWindow; window != nil {
+					allowed, err := scheduler.WithinWindow(time.Now(), window.Start, window.End)
+					if err != nil {
+						log.Printf("evaluate schedule window for machine rule %q: %v", ruleName, err)
+						return
+					}
+					if !allowed {
+						log.Printf("skip machine sync %q outside configured schedule window", ruleName)
+						return
+					}
+				}
 				if _, err := orch.RunSync("_machine", ruleName); err != nil {
 					log.Printf("machine sync %q: %v", ruleName, err)
 				}
@@ -97,15 +120,21 @@ func main() {
 		DB:            db,
 		UserRuleStore: userRuleStore,
 		ConfigPath:    *configPath,
-		TriggerSyncFn: func(username, ruleName string) (string, error) {
-			return orch.RunSync(username, ruleName)
+		TriggerSyncFn: func(username, ruleName, sshAuthSock string, uid uint32) (string, error) {
+			return orch.RunSyncWithSigner(username, ruleName, func(payload []byte) ([]byte, *ssh.Signature, error) {
+				return auth.SignWithSSHAgentForUser(sshAuthSock, uid, payload)
+			})
 		},
-		GetStatusFn: func(taskID string) (*agentpbv1.SyncStatusUpdate, error) {
-			tracker, err := orch.GetTracker(taskID)
+		GetStatusFn: func(username, taskID string) (*agentpbv1.SyncStatusUpdate, error) {
+			tracker, err := orch.GetTrackerForUser(username, taskID)
 			if err != nil {
 				return nil, err
 			}
 			phase, stats, files := tracker.Snapshot()
+			failureReason := ""
+			if task, taskErr := store.GetTask(db, taskID); taskErr == nil && task != nil {
+				failureReason = task.Error
+			}
 			return &agentpbv1.SyncStatusUpdate{
 				TaskId:       taskID,
 				Phase:        string(phase),
@@ -118,22 +147,31 @@ func main() {
 					TransferredBytes: stats.TransferredBytes,
 					CurrentRateBps:   stats.CurrentRateBPS,
 				},
+				Error: failureReason,
 			}, nil
 		},
-		RequestRestoreFn: func(username string, uid uint32, targetPath string, nonce, signature []byte) (string, error) {
-			return orch.RunRestore(username, uid, targetPath, nonce, signature)
+		RequestRestoreFn: func(username string, uid uint32, targetPath, server string, nonce, signature []byte) (string, error) {
+			return orch.RunRestore(username, uid, targetPath, server, nonce, signature)
 		},
-		GetQuotaUsageFn: func(username string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error) {
-			usage, err := orch.GetQuotaUsage(username, nonce, signature)
+		GetQuotaUsageFn: func(username, server string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error) {
+			usage, err := orch.GetQuotaUsage(username, server, nonce, signature)
 			if err != nil {
 				return nil, err
 			}
-			return &agentpbv1.QuotaUsage{
+			result := &agentpbv1.QuotaUsage{
 				UsedBytes:  usage.UsedBytes,
 				QuotaBytes: usage.QuotaBytes,
 				Dataset:    usage.Dataset,
-				Server:     cfg.Servers[0].Address,
-			}, nil
+				Server:     server,
+			}
+			if cfg.Hooks.OnQuotaWarning != "" && cfg.QuotaWarningPercent > 0 && quotaWarningReached(result.UsedBytes, result.QuotaBytes, cfg.QuotaWarningPercent) {
+				go func() {
+					if err := hooks.RunQuotaWarning(context.Background(), cfg.Hooks.OnQuotaWarning, hooks.QuotaWarning{Username: username, Server: result.Server, Used: result.UsedBytes, Quota: result.QuotaBytes}); err != nil {
+						log.Printf("run quota warning hook: %v", err)
+					}
+				}()
+			}
+			return result, nil
 		},
 		GetAuthChallengeFn: func() (*agentpbv1.AuthChallenge, error) {
 			server, challenge, err := orch.GetAuthChallenge()
@@ -201,4 +239,14 @@ func main() {
 	if err := srv.Serve(lis); err != nil {
 		log.Fatalf("serve: %v", err)
 	}
+}
+
+func quotaWarningReached(used, quota, percent int64) bool {
+	if used < 0 || quota <= 0 || percent <= 0 {
+		return false
+	}
+	whole := quota / 100
+	remainder := quota % 100
+	threshold := whole*percent + (remainder*percent+99)/100
+	return used >= threshold
 }

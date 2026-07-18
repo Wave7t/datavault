@@ -32,9 +32,9 @@ func PackBatches(diffs []scanner.FileDiff, batchSize int) []Batch {
 }
 
 // PackBatchesWithinSize splits files by both count and total file content.
-// A non-positive maxBytes disables the byte limit. A single file that exceeds
-// a positive limit cannot be represented by the current FileEntry protocol
-// and returns an error before any stream is opened.
+// A non-positive maxBytes disables the byte limit. A single large file is
+// emitted as a standalone batch; transport splits that batch into protocol
+// chunks so it never exceeds the gRPC message limit.
 func PackBatchesWithinSize(diffs []scanner.FileDiff, batchSize int, maxBytes int64) ([]Batch, error) {
 	if batchSize <= 0 {
 		batchSize = DefaultBatchSize
@@ -60,7 +60,12 @@ func PackBatchesWithinSize(diffs []scanner.FileDiff, batchSize int, maxBytes int
 		if diff.Action != scanner.DiffDelete {
 			fileBytes = diff.File.Size
 			if maxBytes > 0 && fileBytes > maxBytes {
-				return nil, fmt.Errorf("file %q is %d bytes, exceeding the %d-byte batch limit", diff.File.Path, fileBytes, maxBytes)
+				flush()
+				batches = append(batches, Batch{
+					ID:    fmt.Sprintf("batch-%d", len(batches)+1),
+					Files: []scanner.FileDiff{diff},
+				})
+				continue
 			}
 		}
 		if len(batchFiles) > 0 && (len(batchFiles) >= batchSize || (maxBytes > 0 && batchBytes+fileBytes > maxBytes)) {

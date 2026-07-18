@@ -47,8 +47,18 @@ func New(certFile, keyFile, caFile string) (*ConnPool, error) {
 // GetClient returns a BackupServiceClient for the given server address.
 // Connections are created lazily and cached for reuse.
 func (p *ConnPool) GetClient(address string) (backuppbv1.BackupServiceClient, error) {
+	return p.GetClientWithServerName(address, "")
+}
+
+// GetClientWithServerName returns a client that connects to address while
+// verifying the server certificate against serverName. An empty serverName
+// keeps gRPC's normal authority-derived TLS name. This is needed when an
+// operator connects by IP address or a network alias but the certificate SAN
+// intentionally contains a stable DNS name.
+func (p *ConnPool) GetClientWithServerName(address, serverName string) (backuppbv1.BackupServiceClient, error) {
+	cacheKey := address + "\x00" + serverName
 	p.mu.RLock()
-	client, ok := p.clients[address]
+	client, ok := p.clients[cacheKey]
 	p.mu.RUnlock()
 	if ok {
 		return client, nil
@@ -58,13 +68,14 @@ func (p *ConnPool) GetClient(address string) (backuppbv1.BackupServiceClient, er
 	defer p.mu.Unlock()
 
 	// Double check after acquiring write lock
-	if client, ok := p.clients[address]; ok {
+	if client, ok := p.clients[cacheKey]; ok {
 		return client, nil
 	}
 
 	tlsCfg := &tls.Config{
 		Certificates: []tls.Certificate{p.cert},
 		RootCAs:      p.rootCAs,
+		ServerName:   serverName,
 		MinVersion:   tls.VersionTLS13,
 	}
 
@@ -84,8 +95,8 @@ func (p *ConnPool) GetClient(address string) (backuppbv1.BackupServiceClient, er
 	}
 
 	client = backuppbv1.NewBackupServiceClient(conn)
-	p.conns[address] = conn
-	p.clients[address] = client
+	p.conns[cacheKey] = conn
+	p.clients[cacheKey] = client
 	return client, nil
 }
 

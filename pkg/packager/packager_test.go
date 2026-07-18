@@ -69,9 +69,12 @@ func TestPackBatchesWithinSize(t *testing.T) {
 	}
 }
 
-func TestPackBatchesWithinSizeRejectsOversizedFile(t *testing.T) {
-	_, err := PackBatchesWithinSize([]scanner.FileDiff{{File: scanner.FileInfo{Path: "large", Size: 11}}}, DefaultBatchSize, 10)
-	if err == nil {
-		t.Fatal("expected oversized file error")
+func TestPackBatchesWithinSizeKeepsOversizedFileStandalone(t *testing.T) {
+	batches, err := PackBatchesWithinSize([]scanner.FileDiff{{File: scanner.FileInfo{Path: "large", Size: 11}}}, DefaultBatchSize, 10)
+	if err != nil {
+		t.Fatalf("PackBatchesWithinSize: %v", err)
+	}
+	if len(batches) != 1 || len(batches[0].Files) != 1 || batches[0].Files[0].File.Path != "large" {
+		t.Fatalf("expected one standalone oversized batch, got %#v", batches)
 	}
 }
