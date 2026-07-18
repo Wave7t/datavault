@@ -1,180 +1,194 @@
-# datavault / dvault
+# datavault / `dvault`
 
 [![CI](https://github.com/Wave7t/datavault/actions/workflows/ci.yml/badge.svg)](https://github.com/Wave7t/datavault/actions/workflows/ci.yml)
 
-`datavault` is a Linux backup system for hosts that need incremental file
-backup, user-controlled authorization, and ZFS recovery points in one
-deployment.
+> Self-service backup for shared Linux servers.
+
+`datavault` is a self-hosted backup service for small production Linux
+clusters. It gives each Unix user a separate, quota-bound place for their
+important data while keeping storage, retention, and system-data protection in
+the hands of the operations team.
+
+It is for the common small-team setup: a few production servers on a private
+network, one ZFS-backed backup server, and people who need to protect the most
+important part of their home or project directories without becoming backup
+administrators.
 
 ## Why datavault
 
-Most file-copy backup tools either run with a broad service credential or
-leave snapshot, quota, and recovery policy to separate tooling. datavault
-combines those concerns while keeping their authority boundaries explicit:
+Most backup tools start from a **device** or a **repository**. That works well
+when every server has one owner, or when an administrator writes and maintains
+every backup job. It becomes awkward on a shared Linux host:
 
-- **A user signs each user backup.** The root-run Agent verifies the local
-  Unix-socket peer and asks that user's SSH agent to authorize every batch;
-  it does not retain a reusable user private key.
-- **ZFS is part of the durability contract.** A successful backup creates a
-  recovery snapshot in a per-host, per-user dataset with quota and retention
-  policy, rather than merely copying files to a directory.
-- **Incremental changes are namespace-safe.** Source-root prefixes prevent
-  same-named files from independent roots from colliding. Mode-only changes,
-  deletes, large-file chunks, and atomic restore writes are preserved.
-- **The transport is designed for operations.** mTLS identifies backup hosts;
-  signed user operations use single-use nonces. Retry bounds, transfer limits,
-  scheduling windows, health checks, and hooks are built into the control
-  path.
+- users need to choose their own important directories and restore their own
+  data;
+- operators need to reserve capacity fairly, retain recovery points, back up
+  public application data, and respond to failures;
+- neither side should have to maintain a separate collection of repository
+  credentials, timers, quota scripts, and restore procedures.
 
-It builds three binaries: `dvault` (CLI), `datavault-agent` (host-side agent),
-and `datavault-server` (ZFS-backed backup service).
+datavault makes the **Unix user on a shared host** the unit of self-service.
+The user owns their rules and restores; the administrator owns the backup
+infrastructure and its policies.
 
-## Deploy a first host
+| Users manage | Administrators manage |
+| --- | --- |
+| Paths below their home directory | Backup servers and private-network access |
+| Include/exclude rules and enabling a rule | Public or machine-level backup rules |
+| Triggering a sync, checking usage, and restoring their data | ZFS storage, per-user quotas, retention, and free-space policy |
+| Their backup identity | Host enrollment, certificates, alerts, and failure hooks |
 
-This tutorial deploys one server, `backup-01.example.com`, and one Agent,
-`web-01`. Use a secure configuration-management or secret-distribution system
-when the CA and Agent credentials cross machines.
+This is deliberately narrower than a general endpoint-backup suite. It is not
+trying to replace desktop backup, VM backup, SaaS backup, or a multi-cloud
+storage platform.
 
-### 1. Prepare the server and install datavault
+## What makes it different
 
-The server needs Linux, ZFS tools, and an existing dataset for backups. Build
-the release on a trusted build host, then install the binaries and systemd
-units on the target hosts:
+**A practical control plane for shared Linux servers.** Rather than asking an
+operator to create a separate backup script and storage account for every
+person, datavault connects a local Unix account to its own rules, storage
+quota, and restore boundary.
+
+**Storage policy is enforced where the data lives.** The server creates a ZFS
+dataset per host and user. A successful upload produces a recovery snapshot;
+ZFS enforces quota and the server applies retention and minimum-free-space
+policy. This turns "about 100 GB each" into a real limit instead of a
+spreadsheet promise.
+
+**The system and the user have separate jobs.** Machine rules protect
+administrator-owned paths such as `/srv/app` or `/etc`. User rules are limited
+to the requesting user's home directory, so a personal rule cannot silently
+turn into a backup of another person's files.
+
+**Explicit identity on both hops.** A local Unix socket identifies the calling
+user with `SO_PEERCRED`; Agents identify to Servers with mTLS. User operations
+carry a fresh SSH-agent signature and a single-use nonce, while the Agent never
+stores a reusable user private key.
+
+```text
+alice runs dvault                         operations team
+       │                                          │
+       │ manages ~/project and restores it        │ owns storage and policy
+       ▼                                          ▼
+dvault CLI ── Unix socket ── datavault-agent ── mTLS ── datavault-server
+                                shared host              ZFS backup pool
+                                  │                           │
+                            UID boundary               host/user dataset
+                                                        quota + snapshots
+```
+
+## What it does today
+
+- Incremental, namespace-safe file backup of one or more source roots.
+- Per-user rules with glob exclusions; user paths must remain below `$HOME`.
+- Separate machine rules for administrator-owned directories.
+- ZFS datasets per host and user, hard quotas, snapshots, and retention.
+- Multiple backup servers, mTLS host enrollment, retries, transfer limits,
+  health checks, and failure/quota hooks.
+- User-triggered backup, quota inspection, progress reporting, and restore to
+  a safe target below the user's home directory.
+
+## Is datavault a fit?
+
+Use datavault when all of the following are true:
+
+- Your sources and backup servers are Linux systems on a private network.
+- Several Unix users share one or more production servers.
+- You want one locally operated backup pool, often a modest ZFS RAID mirror,
+  with fair per-user limits.
+- Operators are responsible for platform reliability, while users choose the
+  important data in their own home directories.
+
+Choose another tool when you need desktop backup, virtual-machine images,
+databases with application-aware backups, cloud/SaaS data protection, or a
+hostile-root confidentiality boundary. datavault defines backup-service
+authorization and responsibility boundaries; it does not make source data
+invisible to a privileged administrator on the source or backup host.
+
+> **A RAID mirror is storage, not a complete backup strategy.** Use a second
+> independently operated copy or site for data whose loss would be serious.
+> datavault can send the same data to multiple configured backup servers.
+
+## Quick start
+
+The first deployment needs one Linux server with ZFS and one Linux host that
+will run the Agent. Build and install on trusted hosts:
 
 ```bash
 make build
 sudo make install
 ```
 
-Create or select a ZFS dataset such as `tank/backups`. The service discovers
-its ZFS mount point at startup. The bundled service units intentionally use a
-systemd 219-compatible baseline, including CentOS 7.
+Then:
 
-### 2. Create the private CA and issue certificates
+1. Create a private CA and issue a Server certificate and an Agent certificate.
+2. Configure the Server with its ZFS pool, allowed Agent hosts, user quota, and
+   snapshot policy.
+3. Configure each Agent with the Server address and any machine-level rules.
+4. Authorize each user's public key, start both services, and let users create
+   their own rules.
 
-Run these commands as root on the CA host. The server certificate SAN must
-match the name that Agents verify.
+The complete, copyable deployment guide—including certificate commands,
+configuration examples, and user key enrollment—is in
+[Deployment and configuration](docs/deployment.md). Before production use, run
+the separate [server preflight](docs/server-test-preflight.md).
 
-```bash
-sudo dvault cert init-ca
-
-sudo dvault cert issue --server \
-  --common-name backup-01.example.com \
-  --dns backup-01.example.com \
-  --cert /etc/datavault/server/cert.pem \
-  --key /etc/datavault/server/key.pem
-
-sudo dvault cert issue --client \
-  --common-name web-01 \
-  --cert /etc/datavault/agent/cert.pem \
-  --key /etc/datavault/agent/key.pem
-```
-
-Install the CA certificate at `/etc/datavault/server/ca.pem` on the server and
-`/etc/datavault/agent/ca.pem` on the Agent. Install the Agent certificate and
-key only on `web-01`; private keys must remain mode `0600`.
-
-### 3. Configure the server and Agent
-
-Create `/etc/datavault/server/config.yaml`:
-
-```yaml
-server:
-  cert_file: /etc/datavault/server/cert.pem
-  key_file: /etc/datavault/server/key.pem
-  ca_file: /etc/datavault/server/ca.pem
-  # Bind the server's private interface, not a public address.
-  listen: "10.20.0.10:8443"
-  backup_pool: tank/backups
-
-allowed_hosts:
-  - cn: web-01
-
-user_policy:
-  default_quota_gb: 20
-
-snapshot_policy:
-  min_snapshots: 2
-  max_snapshots: 7
-  min_free_gb: 100
-```
-
-Create `/etc/datavault/agent/config.yaml` on `web-01`:
-
-```yaml
-agent:
-  cert_file: /etc/datavault/agent/cert.pem
-  key_file: /etc/datavault/agent/key.pem
-  ca_file: /etc/datavault/agent/ca.pem
-
-servers:
-  - address: backup-01.example.com:8443
-
-machine_rules:
-  - name: application-data
-    paths: [/srv/app]
-    schedule: "0 03 * * *"
-    enabled: true
-```
-
-If routing uses an IP address, load-balancer name, or container alias that is
-not present in the server certificate, set `tls_server_name` to a certificate
-DNS/IP SAN. Do not disable TLS verification.
-
-The Agent writes service logs to `/var/log/datavault/agent.log`; `make install`
-installs a daily rotation policy that retains 14 compressed copies. This avoids
-an incompatibility between systemd 219's journal stream and the static Agent
-binary.
-
-### 4. Authorize users and start the services
-
-For a user backup, place that user's SSH public key on the server. The first
-directory component is the Agent certificate CN (`web-01` here):
+Once Alice is authorized and has an `SSH_AUTH_SOCK`, her workflow is small:
 
 ```bash
-sudo install -d -m 0755 /etc/datavault/server/authorized_keys/web-01
-sudo install -m 0644 /path/to/alice.pub \
-  /etc/datavault/server/authorized_keys/web-01/alice.pub
-
-sudo systemctl enable --now datavault-server
-sudo systemctl enable --now datavault-agent
-```
-
-### 5. Run the first backup and restore
-
-From Alice's login session on `web-01`, with `SSH_AUTH_SOCK` available:
-
-```bash
-dvault rule add documents "$HOME/Documents" --exclude '**/*.tmp'
-dvault sync trigger
+dvault rule add project "$HOME/project" --exclude '**/node_modules/**'
+dvault sync trigger --rule project
 dvault quota
 dvault restore --path "$HOME/restored"
 ```
 
-Use `dvault sync status --task <task-id>` to follow a backup. Validate the
-complete installation, including mTLS health and a restore checksum, with the
-[server test preflight](docs/server-test-preflight.md) before admitting
-production data.
+Machine rules may run on an Agent schedule because they use the Agent's mTLS
+identity. User-owned syncs currently require the invoking user's live SSH
+agent; datavault does not retain user private keys to schedule them unattended.
+
+## Security and operational model
+
+- **Private-network service:** bind the Server to a firewall-restricted
+  interface and verify all Agent connections with mTLS.
+- **User boundary:** the Agent derives the caller from the Unix socket peer,
+  not from a client-supplied username. User paths and restore targets are
+  restricted to that account's home directory.
+- **Operator boundary:** only the Server manages ZFS datasets, quotas, and
+  snapshots. The backup RPC has no delete-snapshot operation.
+- **Key custody:** user private keys remain in the user's SSH agent; the
+  Server verifies the matching public key for signed user operations.
+- **Production validation:** test a restore and follow the
+  [server preflight](docs/server-test-preflight.md) on real ZFS storage before
+  trusting a deployment with production data.
+
+The [security model](docs/security-model.md) explains the trust boundaries,
+signed-request flow, key-enrollment modes, and limitations in detail.
+
+## Project direction
+
+datavault is intentionally an open-source tool for a focused operational
+problem, not a feature-for-feature alternative to commercial backup suites.
+The most useful future work is work that makes the shared-server model easier
+to adopt and operate:
+
+- user-approved, revocable policies for unattended user backups;
+- point-in-time snapshot browsing and restore verification;
+- identity onboarding, observability, and deployable small-cluster defaults;
+- encrypted offsite replication or a second independent backup target.
+
+If you operate a shared Linux cluster, have been maintaining per-user backup
+scripts, or want to contribute around these boundaries, please open an issue
+with the deployment and recovery workflow you need.
 
 ## Documentation
 
 - [Deployment and configuration reference](docs/deployment.md)
+- [Security model](docs/security-model.md)
 - [Server test preflight](docs/server-test-preflight.md)
 - [Development guide](docs/development.md)
-- [Contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md)
-
-## Production scope
-
-datavault has passed application-level loop-backed ZFS validation, including
-mTLS health, incremental backup, signed user restore, and nonce replay
-rejection. A file-backed pool does not validate real disks or operational
-response: complete the preflight against the intended ZFS topology, monitoring
-and alert delivery, and power-loss recovery before production admission.
-
-The main protocol limitation is restore failover: after a user signs a
-server-specific nonce, a failed restore needs a fresh challenge and signature
-from another configured server.
+- [Contributing](CONTRIBUTING.md)
+- [Security reporting](SECURITY.md)
 
 ## License
 
-This project is released under the [MIT License](LICENSE).
+datavault is released under the [MIT License](LICENSE).
