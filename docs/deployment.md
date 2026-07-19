@@ -29,6 +29,124 @@ rotates the log daily and retains 14 compressed copies. File logging avoids a
 verified `SIGPIPE` failure mode in the systemd 219 journal stream with the
 static Agent binary.
 
+## Administrator-managed SSH-agent availability
+
+User-owned `dvault sync`, `dvault quota`, and `dvault restore` operations need
+an SSH agent that is live in the user's login session. The agent must contain
+the public key registered for that `(Agent CN, Unix username)` identity. This
+is a user authentication requirement, not an Agent daemon credential: do not
+put user private keys in `/etc/datavault`, in the Agent configuration, or in a
+root-owned script.
+
+The recommended arrangement for users who SSH to an Agent host (for example, a
+relay) is **host-specific SSH-agent forwarding**. Configure it centrally on
+managed client machines, rather than enabling forwarding for every SSH target:
+
+```sshconfig
+# /etc/ssh/ssh_config.d/60-datavault-relay.conf
+Host relay.example.com relay
+    ForwardAgent yes
+```
+
+On the relay, ensure the SSH server permits it (this is commonly the default,
+but set it explicitly when datavault depends on it):
+
+```text
+# /etc/ssh/sshd_config.d/60-datavault.conf
+AllowAgentForwarding yes
+```
+
+Reload the SSH daemon with the distribution-appropriate command, for example
+`systemctl reload sshd`. A user still loads their own private key on the
+managed client (`ssh-add`); forwarding makes that user's existing
+`SSH_AUTH_SOCK` available on the relay without copying the private key there.
+Restrict the `Host` entry to datavault relays: a forwarded agent lets the
+remote host request signatures while the session is active.
+
+For users who log in directly to the relay and do not use forwarding, an
+administrator can install one of the following interactive-shell snippets.
+They reuse a valid session agent when available, recover a valid per-user
+agent started by a previous shell, and otherwise start a new per-user agent.
+They never add a private key automatically; the user must run `ssh-add` and
+enter any passphrase themselves.
+
+For Bourne-compatible login shells, install this as
+`/etc/profile.d/datavault-ssh-agent.sh` with mode `0644`:
+
+```sh
+# Do nothing for non-interactive shells or a forwarded/otherwise valid agent.
+case $- in
+  *i*) ;;
+  *) return ;;
+esac
+
+dvault_ssh_agent_env="$HOME/.ssh/datavault-ssh-agent.sh"
+if [ -z "${SSH_AUTH_SOCK:-}" ] || [ ! -S "$SSH_AUTH_SOCK" ]; then
+  if [ -r "$dvault_ssh_agent_env" ]; then
+    . "$dvault_ssh_agent_env" >/dev/null
+  fi
+fi
+if [ -z "${SSH_AUTH_SOCK:-}" ] || [ ! -S "$SSH_AUTH_SOCK" ]; then
+  mkdir -p "$HOME/.ssh"
+  (umask 077; ssh-agent -s >"$dvault_ssh_agent_env")
+  chmod 600 "$dvault_ssh_agent_env"
+  . "$dvault_ssh_agent_env" >/dev/null
+fi
+unset dvault_ssh_agent_env
+```
+
+For `csh`/`tcsh`, place the equivalent in `/etc/csh.cshrc` (or the
+distribution's system-wide `csh` startup file). The `prompt` guard is important
+because it prevents non-interactive jobs from creating background agents:
+
+```csh
+if ($?prompt) then
+    set dvault_ssh_agent_env = "$HOME/.ssh/datavault-ssh-agent.csh"
+    set dvault_need_ssh_agent = 0
+    if (! $?SSH_AUTH_SOCK) then
+        set dvault_need_ssh_agent = 1
+    else if (! -S "$SSH_AUTH_SOCK") then
+        set dvault_need_ssh_agent = 1
+    endif
+    if ($dvault_need_ssh_agent && -r "$dvault_ssh_agent_env") then
+        source "$dvault_ssh_agent_env" > /dev/null
+        set dvault_need_ssh_agent = 0
+        if (! $?SSH_AUTH_SOCK) then
+            set dvault_need_ssh_agent = 1
+        else if (! -S "$SSH_AUTH_SOCK") then
+            set dvault_need_ssh_agent = 1
+        endif
+    endif
+    if ($dvault_need_ssh_agent) then
+        if (! -d "$HOME/.ssh") mkdir -m 700 "$HOME/.ssh"
+        (umask 077; ssh-agent -c) >! "$dvault_ssh_agent_env"
+        chmod 600 "$dvault_ssh_agent_env"
+        source "$dvault_ssh_agent_env" > /dev/null
+    endif
+    unset dvault_ssh_agent_env
+    unset dvault_need_ssh_agent
+endif
+```
+
+After the first direct login, the user must load the intended key and verify
+it. Datavault currently signs with the first key returned by the SSH agent, so
+the registered public key must match the first output line:
+
+```bash
+ssh-add ~/.ssh/id_ed25519
+test -S "$SSH_AUTH_SOCK"
+ssh-add -L | sed -n '1p'
+dvault quota
+```
+
+Do not source the generated per-user environment file from a privileged shell.
+It is deliberately user-owned and contains only that user's SSH-agent
+environment. The root-running datavault Agent does not inherit this environment:
+the CLI passes the socket path for each request, and the Agent verifies that it
+is an absolute Unix socket owned by the calling UID. Keep the supplied Agent
+systemd unit's `PrivateTmp=no` setting unless an equivalent shared socket path
+is explicitly bind-mounted into a private namespace.
+
 ## OS-account key enrollment
 
 The default key trust mode is `admin_only`: an administrator creates the
