@@ -73,6 +73,9 @@ func runServer() {
 	if err != nil {
 		log.Fatalf("init ZFS: %v", err)
 	}
+	if err := zfsMgr.EnsureDatasetMounted(cfg.Server.BackupPool); err != nil {
+		log.Fatalf("mount backup pool: %v", err)
+	}
 
 	// Data receiver for writing backup files to the configured dataset's real
 	// mount point. Do not derive this path from the dataset name: ZFS may be

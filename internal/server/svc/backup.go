@@ -97,6 +97,9 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 			if err := s.ZFS.CreateDataset(dsName); err != nil {
 				return status.Errorf(codes.Internal, "create dataset: %v", err)
 			}
+			if err := s.ZFS.EnsureDatasetMounted(dsName); err != nil {
+				return status.Errorf(codes.Internal, "mount dataset: %v", err)
+			}
 
 			// Set quota (default or per-user override)
 			quota := s.Cfg.UserPolicy.DefaultQuotaGB

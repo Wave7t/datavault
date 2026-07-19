@@ -12,6 +12,7 @@ import (
 // All commands are executed via exec.Command with individual args (never sh -c).
 type ZFS struct {
 	poolPath string // e.g., "tank/backups"
+	runZFS   func(args ...string) (string, error)
 }
 
 // New creates a new ZFS manager for the given pool path.
@@ -26,12 +27,72 @@ func New(poolPath string) (*ZFS, error) {
 // zfs executes a ZFS command with the given arguments and returns trimmed stdout.
 // Individual args are passed directly to exec.Command (never via sh -c).
 func (z *ZFS) zfs(args ...string) (string, error) {
+	if z.runZFS != nil {
+		return z.runZFS(args...)
+	}
 	cmd := exec.Command("zfs", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("zfs %v: %s (%w)", args, strings.TrimSpace(string(out)), err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// EnsureDatasetMounted mounts name and every dataset between the configured
+// backup pool and name. A dataset's mountpoint property alone is insufficient:
+// ZFS may retain a valid mountpoint property while the filesystem is not
+// currently mounted, which would make the Receiver write into an obscured
+// parent-directory path or leave completed backup data inaccessible.
+func (z *ZFS) EnsureDatasetMounted(name string) error {
+	if err := ValidateDatasetName(name); err != nil {
+		return err
+	}
+	if name != z.poolPath && !strings.HasPrefix(name, z.poolPath+"/") {
+		return fmt.Errorf("dataset %q is outside backup pool %q", name, z.poolPath)
+	}
+
+	dataset := z.poolPath
+	if err := z.ensureMounted(dataset); err != nil {
+		return err
+	}
+	if name == z.poolPath {
+		return nil
+	}
+	for _, part := range strings.Split(strings.TrimPrefix(name, z.poolPath+"/"), "/") {
+		if part == "" {
+			continue
+		}
+		dataset += "/" + part
+		if err := z.ensureMounted(dataset); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (z *ZFS) ensureMounted(dataset string) error {
+	mounted, err := z.zfs("get", "-Hp", "-o", "value", "mounted", dataset)
+	if err != nil {
+		return fmt.Errorf("get mounted state for %q: %w", dataset, err)
+	}
+	switch mounted {
+	case "yes":
+		return nil
+	case "no":
+		if _, err := z.zfs("mount", dataset); err != nil {
+			return fmt.Errorf("mount %q: %w", dataset, err)
+		}
+		mounted, err = z.zfs("get", "-Hp", "-o", "value", "mounted", dataset)
+		if err != nil {
+			return fmt.Errorf("verify mounted state for %q: %w", dataset, err)
+		}
+		if mounted == "yes" {
+			return nil
+		}
+		return fmt.Errorf("dataset %q remained unmounted after zfs mount (state %q)", dataset, mounted)
+	default:
+		return fmt.Errorf("unexpected mounted state %q for dataset %q", mounted, dataset)
+	}
 }
 
 // CreateDataset creates a new ZFS dataset. It is idempotent: if the dataset

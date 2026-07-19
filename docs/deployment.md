@@ -198,9 +198,11 @@ Server defaults:
 - Backup layout: `<backup_pool>/<agent-certificate-cn>/<username>/`
 
 The server creates per-host and per-user datasets, applies quotas, and creates
-recovery snapshots only after a terminally successful upload. Keep the parent
-backup dataset mounted and reserve enough free space for ZFS metadata and the
-configured `min_free_gb` policy.
+recovery snapshots only after a terminally successful upload. At startup it
+verifies that the configured backup pool is mounted; before each write it also
+mounts the target host and user datasets. Keep the parent backup dataset
+mounted and reserve enough free space for ZFS metadata and the configured
+`min_free_gb` policy.
 
 Do not bind the service to a public interface unless that exposure is a
 deliberate, firewall-restricted design. Ensure every Agent `servers.address`

@@ -1,7 +1,10 @@
 package zfs
 
 import (
+	"errors"
 	"os/exec"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -106,6 +109,72 @@ func TestNewInvalidPoolPath(t *testing.T) {
 	_, err := New("invalid pool path")
 	if err == nil {
 		t.Fatal("expected error for invalid pool path")
+	}
+}
+
+func TestEnsureDatasetMountedMountsMissingAncestors(t *testing.T) {
+	mounted := map[string]string{
+		"backup_pool":                  "yes",
+		"backup_pool/cad52-agent":      "no",
+		"backup_pool/cad52-agent/want": "no",
+	}
+	var calls []string
+	z := &ZFS{
+		poolPath: "backup_pool",
+		runZFS: func(args ...string) (string, error) {
+			calls = append(calls, strings.Join(args, " "))
+			switch args[0] {
+			case "get":
+				return mounted[args[len(args)-1]], nil
+			case "mount":
+				mounted[args[1]] = "yes"
+				return "", nil
+			default:
+				return "", errors.New("unexpected ZFS command")
+			}
+		},
+	}
+
+	if err := z.EnsureDatasetMounted("backup_pool/cad52-agent/want"); err != nil {
+		t.Fatalf("EnsureDatasetMounted: %v", err)
+	}
+	want := []string{
+		"get -Hp -o value mounted backup_pool",
+		"get -Hp -o value mounted backup_pool/cad52-agent",
+		"mount backup_pool/cad52-agent",
+		"get -Hp -o value mounted backup_pool/cad52-agent",
+		"get -Hp -o value mounted backup_pool/cad52-agent/want",
+		"mount backup_pool/cad52-agent/want",
+		"get -Hp -o value mounted backup_pool/cad52-agent/want",
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("ZFS commands = %#v, want %#v", calls, want)
+	}
+}
+
+func TestEnsureDatasetMountedRejectsDatasetOutsidePool(t *testing.T) {
+	z := &ZFS{poolPath: "backup_pool"}
+	if err := z.EnsureDatasetMounted("other_pool/cad52-agent/want"); err == nil {
+		t.Fatal("expected dataset outside backup pool to be rejected")
+	}
+}
+
+func TestEnsureDatasetMountedAllowsBackupPoolItself(t *testing.T) {
+	var calls []string
+	z := &ZFS{
+		poolPath: "backup_pool",
+		runZFS: func(args ...string) (string, error) {
+			calls = append(calls, strings.Join(args, " "))
+			return "yes", nil
+		},
+	}
+
+	if err := z.EnsureDatasetMounted("backup_pool"); err != nil {
+		t.Fatalf("EnsureDatasetMounted: %v", err)
+	}
+	want := []string{"get -Hp -o value mounted backup_pool"}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("ZFS commands = %#v, want %#v", calls, want)
 	}
 }
 
