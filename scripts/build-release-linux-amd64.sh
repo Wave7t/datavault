@@ -47,7 +47,13 @@ mkdir -p "$parent_dir"
 stage_dir=$(mktemp -d "$parent_dir/.$bundle_name.tmp.XXXXXX")
 
 cleanup() {
-  [[ -n $stage_dir && -d $stage_dir ]] && rm -rf "$stage_dir"
+  if [[ -n $stage_dir && -d $stage_dir ]]; then
+    rm -rf "$stage_dir"
+  fi
+  # An EXIT trap's status becomes the script's final status.  Once the bundle
+  # has been moved, stage_dir is deliberately empty; return success instead
+  # of turning a successful release build into a CI failure.
+  return 0
 }
 trap cleanup EXIT
 
