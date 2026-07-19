@@ -52,3 +52,6 @@ jobs:
 
       - name: Build binaries
         run: make build
+
+      - name: Build portable Linux release bundle
+        run: make release-linux-amd64

@@ -33,6 +33,10 @@ make ci
 `make build` regenerates Protocol Buffer code and writes binaries to `dist/`.
 `make ci` is the canonical quality gate: formatting, module tidiness, Protocol
 Buffer format/lint/generated checks, `go vet`, race-enabled tests, and builds.
+Neither command creates a portable production bundle. Use
+make release-linux-amd64 only after the quality gate; it runs the isolated
+musl/static Linux release builder described in
+[Standard build and deployment](release-and-deploy.md).
 
 For focused work:
 

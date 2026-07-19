@@ -1,0 +1,16 @@
+.git/
+.github/
+dist/
+.superpowers/
+docs/superpowers/
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+coverage.out
+coverage.html
+*.coverprofile
+*.db
+*.db-shm
+*.db-wal

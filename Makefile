@@ -1,8 +1,9 @@
-.PHONY: all build proto proto-format-check proto-lint generate-check fmt fmt-check vet test test-race tidy-check ci clean install
+.PHONY: all build release-linux-amd64 proto proto-format-check proto-lint generate-check fmt fmt-check vet test test-race tidy-check ci clean install
 
 BINARIES := dvault datavault-agent datavault-server
 CMDS := cmd/dvault cmd/datavault-agent cmd/datavault-server
 DIST_DIR := dist
+RELEASE_DIR := $(DIST_DIR)/release/linux-amd64
 GO_FILES := $(shell find . -type f -name '*.go' -not -path './.git/*' -not -path './vendor/*')
 PROTO_GENERATED_FILES := pkg/agentpb/v1/agent.pb.go pkg/agentpb/v1/agent_grpc.pb.go pkg/backuppb/v1/backup.pb.go pkg/backuppb/v1/backup_grpc.pb.go
 
@@ -13,6 +14,9 @@ build: proto
 	for cmd in $(CMDS); do \
 		go build -o $(DIST_DIR)/$$(basename $$cmd) ./$$cmd; \
 	done
+
+release-linux-amd64:
+	./scripts/build-release-linux-amd64.sh $(RELEASE_DIR)
 
 proto:
 	buf generate

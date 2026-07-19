@@ -21,7 +21,9 @@
 
 4. Update `README.md` and deployment documentation when commands,
    configuration, storage layout, or operational behavior changes.
-5. Open a pull request using the provided template. Keep commits focused and
+5. For a change that affects binaries or deployment, run
+   make release-linux-amd64 and check the generated bundle before merging.
+6. Open a pull request using the provided template. Keep commits focused and
    use an imperative, scoped subject such as `fix: reject invalid archive path`.
 
 ## Protobuf changes

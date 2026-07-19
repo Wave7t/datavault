@@ -183,6 +183,7 @@ with the deployment and recovery workflow you need.
 ## Documentation
 
 - [Deployment and configuration reference](docs/deployment.md)
+- [Standard build and deployment](docs/release-and-deploy.md)
 - [Security model](docs/security-model.md)
 - [Server test preflight](docs/server-test-preflight.md)
 - [Development guide](docs/development.md)

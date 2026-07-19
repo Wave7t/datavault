@@ -1,0 +1,64 @@
+# syntax=docker/dockerfile:1.7
+#
+# Production release builder. It intentionally differs from make build:
+# releases are Linux/amd64, musl-static, and use Go's DNS resolver (netgo).
+# This avoids a static glibc/NSS resolver dependency on older Linux targets.
+
+FROM golang:1.25-bookworm AS build
+
+ARG TARGETOS
+ARG TARGETARCH
+ARG GOPROXY=https://proxy.golang.org,direct
+ARG VCS_REF=unknown
+
+ENV GOPROXY=$GOPROXY
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends binutils musl-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+COPY . ./
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p /out \
+    && export CC=musl-gcc \
+    && export CGO_ENABLED=1 \
+    && export CGO_LDFLAGS=-static \
+    && GOOS=$TARGETOS GOARCH=$TARGETARCH \
+       go build -tags netgo -buildvcs=false -trimpath -ldflags=-linkmode=external \
+         -o /out/dvault ./cmd/dvault \
+    && GOOS=$TARGETOS GOARCH=$TARGETARCH \
+       go build -tags netgo -buildvcs=false -trimpath -ldflags=-linkmode=external \
+         -o /out/datavault-agent ./cmd/datavault-agent \
+    && GOOS=$TARGETOS GOARCH=$TARGETARCH \
+       go build -tags netgo -buildvcs=false -trimpath -ldflags=-linkmode=external \
+         -o /out/datavault-server ./cmd/datavault-server
+
+# A static binary has no ELF interpreter. Fail the release build if this
+# invariant regresses, even if a dynamically linked binary happened to build.
+RUN for binary in /out/dvault /out/datavault-agent /out/datavault-server; do \
+      test -x "$binary"; \
+      ! readelf -l "$binary" | grep -q 'Requesting program interpreter'; \
+    done
+
+RUN install -D -m 0755 scripts/deploy-server.sh /out/scripts/deploy-server.sh \
+    && install -D -m 0755 scripts/deploy-agent.sh /out/scripts/deploy-agent.sh \
+    && install -D -m 0755 scripts/verify-server.sh /out/scripts/verify-server.sh \
+    && install -D -m 0755 scripts/verify-agent.sh /out/scripts/verify-agent.sh \
+    && printf 'source_revision=%s\nplatform=linux/amd64\nlink_mode=musl-static\ndns_resolver=netgo\n' "$VCS_REF" \
+       > /out/BUILD-INFO \
+    && cd /out \
+    && sha256sum dvault datavault-agent datavault-server BUILD-INFO \
+         scripts/deploy-server.sh scripts/deploy-agent.sh \
+         scripts/verify-server.sh scripts/verify-agent.sh \
+         > SHA256SUMS
+
+FROM scratch AS artifacts
+COPY --from=build /out/ /
