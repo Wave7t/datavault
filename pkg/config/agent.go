@@ -49,6 +49,18 @@ type ScheduleWindow struct {
 	End   string `yaml:"end"`
 }
 
+// HTTPSAPIConfig enables the optional HTTPS gateway API. The section is
+// optional; when absent the agent exposes only the Unix socket.
+type HTTPSAPIConfig struct {
+	Listen        string        `yaml:"listen"`
+	CertFile      string        `yaml:"cert_file"`
+	KeyFile       string        `yaml:"key_file"`
+	CAFile        string        `yaml:"ca_file"`
+	GatewayCNs    []string      `yaml:"gateway_cns"`
+	DelegationTTL time.Duration `yaml:"delegation_ttl"`
+	MinUID        int64         `yaml:"min_uid"`
+}
+
 type AgentConfig struct {
 	Agent        AgentBlock    `yaml:"agent"`
 	Servers      []ServerEntry `yaml:"servers"`
@@ -62,6 +74,8 @@ type AgentConfig struct {
 	// QuotaWarningPercent triggers hooks.on_quota_warning at or above this
 	// percentage of a server-reported user quota. Zero disables the hook.
 	QuotaWarningPercent int64 `yaml:"quota_warning_percent"`
+	// HTTPSAPI, when set, enables the mTLS HTTPS gateway listener.
+	HTTPSAPI *HTTPSAPIConfig `yaml:"https_api,omitempty"`
 }
 
 func LoadAgentConfig(path string) (*AgentConfig, error) {
@@ -146,6 +160,39 @@ func LoadAgentConfig(path string) (*AgentConfig, error) {
 		}
 		if cfg.ScheduleWindow.Start == cfg.ScheduleWindow.End {
 			return nil, fmt.Errorf("schedule_window start and end must differ")
+		}
+	}
+	if cfg.HTTPSAPI != nil {
+		h := cfg.HTTPSAPI
+		if h.DelegationTTL == 0 {
+			h.DelegationTTL = 720 * time.Hour
+		}
+		if h.MinUID == 0 {
+			h.MinUID = 1000
+		}
+		for field, value := range map[string]string{
+			"https_api.listen":    h.Listen,
+			"https_api.cert_file": h.CertFile,
+			"https_api.key_file":  h.KeyFile,
+			"https_api.ca_file":   h.CAFile,
+		} {
+			if strings.TrimSpace(value) == "" {
+				return nil, fmt.Errorf("%s is required", field)
+			}
+		}
+		if len(h.GatewayCNs) == 0 {
+			return nil, fmt.Errorf("https_api.gateway_cns requires at least one gateway CN")
+		}
+		for _, cn := range h.GatewayCNs {
+			if strings.TrimSpace(cn) == "" {
+				return nil, fmt.Errorf("https_api.gateway_cns must not contain blank entries")
+			}
+		}
+		if h.DelegationTTL <= 0 {
+			return nil, fmt.Errorf("https_api.delegation_ttl must be positive")
+		}
+		if h.MinUID < 0 {
+			return nil, fmt.Errorf("https_api.min_uid must not be negative")
 		}
 	}
 	for i, rule := range cfg.MachineRules {
