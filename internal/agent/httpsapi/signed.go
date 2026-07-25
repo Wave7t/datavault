@@ -2,6 +2,7 @@ package httpsapi
 
 import (
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"time"
 
@@ -35,7 +36,7 @@ func (s *Server) extractSigned(w http.ResponseWriter, r *http.Request, id identi
 	}
 	payload, err := buildPayload(nonce)
 	if err != nil {
-		if err == errNoDelegation {
+		if errors.Is(err, errNoDelegation) {
 			writeDelegationRequired(w)
 		} else {
 			writeInternal(w, s.log(), "rebuild payload", err)
@@ -177,7 +178,10 @@ func (s *Server) handleDeleteDelegation(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	d, _ := store.GetWebDelegation(s.deps.DB, id.Username, id.GatewayCN)
+	d, err := store.GetWebDelegation(s.deps.DB, id.Username, id.GatewayCN)
+	if err != nil {
+		s.log().Printf("httpsapi: load delegation for server-side removal (user=%q gateway=%q): %v", id.Username, id.GatewayCN, err)
+	}
 	if s.deps.RemoveDelegationKeyFn != nil && d != nil {
 		if err := s.deps.RemoveDelegationKeyFn("", id.Username, id.GatewayCN, d.DelegationPubKey, signed.nonce, signed.signature); err != nil {
 			// Spec: local revocation takes effect regardless; Server-side
