@@ -2,17 +2,16 @@ package svc
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 
 	"github.com/example/datavault/internal/server/middleware"
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
+	"github.com/example/datavault/pkg/auth"
 	"github.com/example/datavault/pkg/store"
 	"github.com/example/datavault/pkg/zfs"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 )
 
 // GetQuotaUsage returns the current disk usage and quota for a user's dataset.
@@ -62,18 +61,10 @@ func (s *BackupServer) verifyQuotaSignature(hostname string, req *backuppbv1.Get
 		return status.Errorf(codes.Unauthenticated, "no authorized key for %s/%s: %v", hostname, req.Username, err)
 	}
 
-	requestForHash := proto.Clone(req).(*backuppbv1.GetQuotaUsageRequest)
-	requestForHash.Signature = nil
-	requestForHash.Nonce = nil
-
-	data, err := proto.Marshal(requestForHash)
+	payload, err := auth.ServerRequestPayload("GetQuotaUsage", req.Nonce, req)
 	if err != nil {
-		return status.Errorf(codes.Internal, "marshal quota request: %v", err)
+		return status.Errorf(codes.Internal, "build quota payload: %v", err)
 	}
-	hash := sha256.Sum256(data)
-
-	payload := append(req.Nonce, []byte("GetQuotaUsage")...)
-	payload = append(payload, hash[:]...)
 
 	var sig ssh.Signature
 	if err := ssh.Unmarshal(req.Signature, &sig); err != nil {

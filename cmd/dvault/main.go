@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"net"
@@ -243,17 +242,10 @@ func quotaCmd() *cobra.Command {
 }
 
 func signServerRequest(method string, nonce []byte, msg proto.Message) ([]byte, error) {
-	data, err := proto.Marshal(msg)
+	payload, err := auth.ServerRequestPayload(method, nonce, msg)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request for signing: %w", err)
+		return nil, err
 	}
-	hash := sha256.Sum256(data)
-
-	payload := make([]byte, 0, len(nonce)+len(method)+sha256.Size)
-	payload = append(payload, nonce...)
-	payload = append(payload, []byte(method)...)
-	payload = append(payload, hash[:]...)
-
 	_, sig, err := auth.SignWithSSHAgent(payload)
 	if err != nil {
 		return nil, err
