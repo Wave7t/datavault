@@ -19,19 +19,22 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AgentService_AddUserRule_FullMethodName       = "/agent.v1.AgentService/AddUserRule"
-	AgentService_RemoveUserRule_FullMethodName    = "/agent.v1.AgentService/RemoveUserRule"
-	AgentService_ListUserRules_FullMethodName     = "/agent.v1.AgentService/ListUserRules"
-	AgentService_EnableUserRule_FullMethodName    = "/agent.v1.AgentService/EnableUserRule"
-	AgentService_DisableUserRule_FullMethodName   = "/agent.v1.AgentService/DisableUserRule"
-	AgentService_AddMachineRule_FullMethodName    = "/agent.v1.AgentService/AddMachineRule"
-	AgentService_RemoveMachineRule_FullMethodName = "/agent.v1.AgentService/RemoveMachineRule"
-	AgentService_ListMachineRules_FullMethodName  = "/agent.v1.AgentService/ListMachineRules"
-	AgentService_TriggerSync_FullMethodName       = "/agent.v1.AgentService/TriggerSync"
-	AgentService_GetSyncStatus_FullMethodName     = "/agent.v1.AgentService/GetSyncStatus"
-	AgentService_GetAuthChallenge_FullMethodName  = "/agent.v1.AgentService/GetAuthChallenge"
-	AgentService_GetQuotaUsage_FullMethodName     = "/agent.v1.AgentService/GetQuotaUsage"
-	AgentService_RequestRestore_FullMethodName    = "/agent.v1.AgentService/RequestRestore"
+	AgentService_AddUserRule_FullMethodName         = "/agent.v1.AgentService/AddUserRule"
+	AgentService_RemoveUserRule_FullMethodName      = "/agent.v1.AgentService/RemoveUserRule"
+	AgentService_ListUserRules_FullMethodName       = "/agent.v1.AgentService/ListUserRules"
+	AgentService_EnableUserRule_FullMethodName      = "/agent.v1.AgentService/EnableUserRule"
+	AgentService_DisableUserRule_FullMethodName     = "/agent.v1.AgentService/DisableUserRule"
+	AgentService_AddMachineRule_FullMethodName      = "/agent.v1.AgentService/AddMachineRule"
+	AgentService_RemoveMachineRule_FullMethodName   = "/agent.v1.AgentService/RemoveMachineRule"
+	AgentService_ListMachineRules_FullMethodName    = "/agent.v1.AgentService/ListMachineRules"
+	AgentService_TriggerSync_FullMethodName         = "/agent.v1.AgentService/TriggerSync"
+	AgentService_GetSyncStatus_FullMethodName       = "/agent.v1.AgentService/GetSyncStatus"
+	AgentService_GetAuthChallenge_FullMethodName    = "/agent.v1.AgentService/GetAuthChallenge"
+	AgentService_GetQuotaUsage_FullMethodName       = "/agent.v1.AgentService/GetQuotaUsage"
+	AgentService_RequestRestore_FullMethodName      = "/agent.v1.AgentService/RequestRestore"
+	AgentService_EnrollWebDelegation_FullMethodName = "/agent.v1.AgentService/EnrollWebDelegation"
+	AgentService_RevokeWebDelegation_FullMethodName = "/agent.v1.AgentService/RevokeWebDelegation"
+	AgentService_ListWebDelegations_FullMethodName  = "/agent.v1.AgentService/ListWebDelegations"
 )
 
 // AgentServiceClient is the client API for AgentService service.
@@ -51,6 +54,9 @@ type AgentServiceClient interface {
 	GetAuthChallenge(ctx context.Context, in *GetAuthChallengeRequest, opts ...grpc.CallOption) (*AuthChallenge, error)
 	GetQuotaUsage(ctx context.Context, in *GetQuotaUsageRequest, opts ...grpc.CallOption) (*QuotaUsage, error)
 	RequestRestore(ctx context.Context, in *RequestRestoreRequest, opts ...grpc.CallOption) (*RequestRestoreResponse, error)
+	EnrollWebDelegation(ctx context.Context, in *EnrollWebDelegationRequest, opts ...grpc.CallOption) (*EnrollWebDelegationResponse, error)
+	RevokeWebDelegation(ctx context.Context, in *RevokeWebDelegationRequest, opts ...grpc.CallOption) (*RevokeWebDelegationResponse, error)
+	ListWebDelegations(ctx context.Context, in *ListWebDelegationsRequest, opts ...grpc.CallOption) (*ListWebDelegationsResponse, error)
 }
 
 type agentServiceClient struct {
@@ -200,6 +206,36 @@ func (c *agentServiceClient) RequestRestore(ctx context.Context, in *RequestRest
 	return out, nil
 }
 
+func (c *agentServiceClient) EnrollWebDelegation(ctx context.Context, in *EnrollWebDelegationRequest, opts ...grpc.CallOption) (*EnrollWebDelegationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EnrollWebDelegationResponse)
+	err := c.cc.Invoke(ctx, AgentService_EnrollWebDelegation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) RevokeWebDelegation(ctx context.Context, in *RevokeWebDelegationRequest, opts ...grpc.CallOption) (*RevokeWebDelegationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeWebDelegationResponse)
+	err := c.cc.Invoke(ctx, AgentService_RevokeWebDelegation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *agentServiceClient) ListWebDelegations(ctx context.Context, in *ListWebDelegationsRequest, opts ...grpc.CallOption) (*ListWebDelegationsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListWebDelegationsResponse)
+	err := c.cc.Invoke(ctx, AgentService_ListWebDelegations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentServiceServer is the server API for AgentService service.
 // All implementations must embed UnimplementedAgentServiceServer
 // for forward compatibility.
@@ -217,6 +253,9 @@ type AgentServiceServer interface {
 	GetAuthChallenge(context.Context, *GetAuthChallengeRequest) (*AuthChallenge, error)
 	GetQuotaUsage(context.Context, *GetQuotaUsageRequest) (*QuotaUsage, error)
 	RequestRestore(context.Context, *RequestRestoreRequest) (*RequestRestoreResponse, error)
+	EnrollWebDelegation(context.Context, *EnrollWebDelegationRequest) (*EnrollWebDelegationResponse, error)
+	RevokeWebDelegation(context.Context, *RevokeWebDelegationRequest) (*RevokeWebDelegationResponse, error)
+	ListWebDelegations(context.Context, *ListWebDelegationsRequest) (*ListWebDelegationsResponse, error)
 	mustEmbedUnimplementedAgentServiceServer()
 }
 
@@ -265,6 +304,15 @@ func (UnimplementedAgentServiceServer) GetQuotaUsage(context.Context, *GetQuotaU
 }
 func (UnimplementedAgentServiceServer) RequestRestore(context.Context, *RequestRestoreRequest) (*RequestRestoreResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RequestRestore not implemented")
+}
+func (UnimplementedAgentServiceServer) EnrollWebDelegation(context.Context, *EnrollWebDelegationRequest) (*EnrollWebDelegationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EnrollWebDelegation not implemented")
+}
+func (UnimplementedAgentServiceServer) RevokeWebDelegation(context.Context, *RevokeWebDelegationRequest) (*RevokeWebDelegationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeWebDelegation not implemented")
+}
+func (UnimplementedAgentServiceServer) ListWebDelegations(context.Context, *ListWebDelegationsRequest) (*ListWebDelegationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListWebDelegations not implemented")
 }
 func (UnimplementedAgentServiceServer) mustEmbedUnimplementedAgentServiceServer() {}
 func (UnimplementedAgentServiceServer) testEmbeddedByValue()                      {}
@@ -514,6 +562,60 @@ func _AgentService_RequestRestore_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentService_EnrollWebDelegation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EnrollWebDelegationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).EnrollWebDelegation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_EnrollWebDelegation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).EnrollWebDelegation(ctx, req.(*EnrollWebDelegationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_RevokeWebDelegation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeWebDelegationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).RevokeWebDelegation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_RevokeWebDelegation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).RevokeWebDelegation(ctx, req.(*RevokeWebDelegationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AgentService_ListWebDelegations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWebDelegationsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentServiceServer).ListWebDelegations(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentService_ListWebDelegations_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentServiceServer).ListWebDelegations(ctx, req.(*ListWebDelegationsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentService_ServiceDesc is the grpc.ServiceDesc for AgentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -568,6 +670,18 @@ var AgentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RequestRestore",
 			Handler:    _AgentService_RequestRestore_Handler,
+		},
+		{
+			MethodName: "EnrollWebDelegation",
+			Handler:    _AgentService_EnrollWebDelegation_Handler,
+		},
+		{
+			MethodName: "RevokeWebDelegation",
+			Handler:    _AgentService_RevokeWebDelegation_Handler,
+		},
+		{
+			MethodName: "ListWebDelegations",
+			Handler:    _AgentService_ListWebDelegations_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

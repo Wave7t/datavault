@@ -44,4 +44,10 @@ type AgentService struct {
 
 	// GetAuthChallengeFn returns a server challenge for CLI-side SSH signing.
 	GetAuthChallengeFn func() (*agentpbv1.AuthChallenge, error)
+
+	// RegisterDelegationKeyFn forwards a delegation enrollment to the server.
+	RegisterDelegationKeyFn func(server, username, gatewayCN, delegationPubKey string, expiresAt int64, nonce, signature []byte) error
+
+	// RemoveDelegationKeyFn forwards a delegation revocation to the server.
+	RemoveDelegationKeyFn func(server, username, gatewayCN, delegationPubKey string, nonce, signature []byte) error
 }

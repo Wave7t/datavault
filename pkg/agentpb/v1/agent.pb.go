@@ -1437,6 +1437,386 @@ func (x *RequestRestoreResponse) GetTaskId() string {
 	return ""
 }
 
+type EnrollWebDelegationRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	GatewayCn        string                 `protobuf:"bytes,1,opt,name=gateway_cn,json=gatewayCn,proto3" json:"gateway_cn,omitempty"`
+	DelegationPubkey string                 `protobuf:"bytes,2,opt,name=delegation_pubkey,json=delegationPubkey,proto3" json:"delegation_pubkey,omitempty"` // authorized_keys format
+	TtlSeconds       int64                  `protobuf:"varint,3,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`                  // <= https_api.delegation_ttl
+	Server           string                 `protobuf:"bytes,4,opt,name=server,proto3" json:"server,omitempty"`                                             // from GetAuthChallenge; empty = default
+	Nonce            []byte                 `protobuf:"bytes,5,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Signature        []byte                 `protobuf:"bytes,6,opt,name=signature,proto3" json:"signature,omitempty"` // user primary key over DelegationConsentPayload
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *EnrollWebDelegationRequest) Reset() {
+	*x = EnrollWebDelegationRequest{}
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnrollWebDelegationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnrollWebDelegationRequest) ProtoMessage() {}
+
+func (x *EnrollWebDelegationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnrollWebDelegationRequest.ProtoReflect.Descriptor instead.
+func (*EnrollWebDelegationRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *EnrollWebDelegationRequest) GetGatewayCn() string {
+	if x != nil {
+		return x.GatewayCn
+	}
+	return ""
+}
+
+func (x *EnrollWebDelegationRequest) GetDelegationPubkey() string {
+	if x != nil {
+		return x.DelegationPubkey
+	}
+	return ""
+}
+
+func (x *EnrollWebDelegationRequest) GetTtlSeconds() int64 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+func (x *EnrollWebDelegationRequest) GetServer() string {
+	if x != nil {
+		return x.Server
+	}
+	return ""
+}
+
+func (x *EnrollWebDelegationRequest) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *EnrollWebDelegationRequest) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+type EnrollWebDelegationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ExpiresAt     int64                  `protobuf:"varint,1,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnrollWebDelegationResponse) Reset() {
+	*x = EnrollWebDelegationResponse{}
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnrollWebDelegationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnrollWebDelegationResponse) ProtoMessage() {}
+
+func (x *EnrollWebDelegationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnrollWebDelegationResponse.ProtoReflect.Descriptor instead.
+func (*EnrollWebDelegationResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *EnrollWebDelegationResponse) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+type RevokeWebDelegationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GatewayCn     string                 `protobuf:"bytes,1,opt,name=gateway_cn,json=gatewayCn,proto3" json:"gateway_cn,omitempty"`
+	Server        string                 `protobuf:"bytes,2,opt,name=server,proto3" json:"server,omitempty"`
+	Nonce         []byte                 `protobuf:"bytes,3,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Signature     []byte                 `protobuf:"bytes,4,opt,name=signature,proto3" json:"signature,omitempty"` // user primary key over DelegationRemovalPayload
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeWebDelegationRequest) Reset() {
+	*x = RevokeWebDelegationRequest{}
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeWebDelegationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeWebDelegationRequest) ProtoMessage() {}
+
+func (x *RevokeWebDelegationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeWebDelegationRequest.ProtoReflect.Descriptor instead.
+func (*RevokeWebDelegationRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *RevokeWebDelegationRequest) GetGatewayCn() string {
+	if x != nil {
+		return x.GatewayCn
+	}
+	return ""
+}
+
+func (x *RevokeWebDelegationRequest) GetServer() string {
+	if x != nil {
+		return x.Server
+	}
+	return ""
+}
+
+func (x *RevokeWebDelegationRequest) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *RevokeWebDelegationRequest) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+type RevokeWebDelegationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeWebDelegationResponse) Reset() {
+	*x = RevokeWebDelegationResponse{}
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeWebDelegationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeWebDelegationResponse) ProtoMessage() {}
+
+func (x *RevokeWebDelegationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeWebDelegationResponse.ProtoReflect.Descriptor instead.
+func (*RevokeWebDelegationResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{31}
+}
+
+type ListWebDelegationsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWebDelegationsRequest) Reset() {
+	*x = ListWebDelegationsRequest{}
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWebDelegationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWebDelegationsRequest) ProtoMessage() {}
+
+func (x *ListWebDelegationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWebDelegationsRequest.ProtoReflect.Descriptor instead.
+func (*ListWebDelegationsRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{32}
+}
+
+type ListWebDelegationsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Delegations   []*WebDelegation       `protobuf:"bytes,1,rep,name=delegations,proto3" json:"delegations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWebDelegationsResponse) Reset() {
+	*x = ListWebDelegationsResponse{}
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWebDelegationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWebDelegationsResponse) ProtoMessage() {}
+
+func (x *ListWebDelegationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWebDelegationsResponse.ProtoReflect.Descriptor instead.
+func (*ListWebDelegationsResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ListWebDelegationsResponse) GetDelegations() []*WebDelegation {
+	if x != nil {
+		return x.Delegations
+	}
+	return nil
+}
+
+type WebDelegation struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	GatewayCn        string                 `protobuf:"bytes,1,opt,name=gateway_cn,json=gatewayCn,proto3" json:"gateway_cn,omitempty"`
+	DelegationPubkey string                 `protobuf:"bytes,2,opt,name=delegation_pubkey,json=delegationPubkey,proto3" json:"delegation_pubkey,omitempty"`
+	ExpiresAt        int64                  `protobuf:"varint,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Revoked          bool                   `protobuf:"varint,4,opt,name=revoked,proto3" json:"revoked,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *WebDelegation) Reset() {
+	*x = WebDelegation{}
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WebDelegation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WebDelegation) ProtoMessage() {}
+
+func (x *WebDelegation) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_agentpb_v1_agent_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WebDelegation.ProtoReflect.Descriptor instead.
+func (*WebDelegation) Descriptor() ([]byte, []int) {
+	return file_pkg_agentpb_v1_agent_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *WebDelegation) GetGatewayCn() string {
+	if x != nil {
+		return x.GatewayCn
+	}
+	return ""
+}
+
+func (x *WebDelegation) GetDelegationPubkey() string {
+	if x != nil {
+		return x.DelegationPubkey
+	}
+	return ""
+}
+
+func (x *WebDelegation) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *WebDelegation) GetRevoked() bool {
+	if x != nil {
+		return x.Revoked
+	}
+	return false
+}
+
 var File_pkg_agentpb_v1_agent_proto protoreflect.FileDescriptor
 
 const file_pkg_agentpb_v1_agent_proto_rawDesc = "" +
@@ -1526,7 +1906,37 @@ const file_pkg_agentpb_v1_agent_proto_rawDesc = "" +
 	"\tsignature\x18\x03 \x01(\fR\tsignature\x12\x16\n" +
 	"\x06server\x18\x04 \x01(\tR\x06server\"1\n" +
 	"\x16RequestRestoreResponse\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\tR\x06taskId2\xc3\b\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\"\xd5\x01\n" +
+	"\x1aEnrollWebDelegationRequest\x12\x1d\n" +
+	"\n" +
+	"gateway_cn\x18\x01 \x01(\tR\tgatewayCn\x12+\n" +
+	"\x11delegation_pubkey\x18\x02 \x01(\tR\x10delegationPubkey\x12\x1f\n" +
+	"\vttl_seconds\x18\x03 \x01(\x03R\n" +
+	"ttlSeconds\x12\x16\n" +
+	"\x06server\x18\x04 \x01(\tR\x06server\x12\x14\n" +
+	"\x05nonce\x18\x05 \x01(\fR\x05nonce\x12\x1c\n" +
+	"\tsignature\x18\x06 \x01(\fR\tsignature\"<\n" +
+	"\x1bEnrollWebDelegationResponse\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x01 \x01(\x03R\texpiresAt\"\x87\x01\n" +
+	"\x1aRevokeWebDelegationRequest\x12\x1d\n" +
+	"\n" +
+	"gateway_cn\x18\x01 \x01(\tR\tgatewayCn\x12\x16\n" +
+	"\x06server\x18\x02 \x01(\tR\x06server\x12\x14\n" +
+	"\x05nonce\x18\x03 \x01(\fR\x05nonce\x12\x1c\n" +
+	"\tsignature\x18\x04 \x01(\fR\tsignature\"\x1d\n" +
+	"\x1bRevokeWebDelegationResponse\"\x1b\n" +
+	"\x19ListWebDelegationsRequest\"W\n" +
+	"\x1aListWebDelegationsResponse\x129\n" +
+	"\vdelegations\x18\x01 \x03(\v2\x17.agent.v1.WebDelegationR\vdelegations\"\x94\x01\n" +
+	"\rWebDelegation\x12\x1d\n" +
+	"\n" +
+	"gateway_cn\x18\x01 \x01(\tR\tgatewayCn\x12+\n" +
+	"\x11delegation_pubkey\x18\x02 \x01(\tR\x10delegationPubkey\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\x03R\texpiresAt\x12\x18\n" +
+	"\arevoked\x18\x04 \x01(\bR\arevoked2\xec\n" +
+	"\n" +
 	"\fAgentService\x12J\n" +
 	"\vAddUserRule\x12\x1c.agent.v1.AddUserRuleRequest\x1a\x1d.agent.v1.AddUserRuleResponse\x12S\n" +
 	"\x0eRemoveUserRule\x12\x1f.agent.v1.RemoveUserRuleRequest\x1a .agent.v1.RemoveUserRuleResponse\x12P\n" +
@@ -1540,7 +1950,10 @@ const file_pkg_agentpb_v1_agent_proto_rawDesc = "" +
 	"\rGetSyncStatus\x12\x1e.agent.v1.GetSyncStatusRequest\x1a\x1a.agent.v1.SyncStatusUpdate0\x01\x12N\n" +
 	"\x10GetAuthChallenge\x12!.agent.v1.GetAuthChallengeRequest\x1a\x17.agent.v1.AuthChallenge\x12E\n" +
 	"\rGetQuotaUsage\x12\x1e.agent.v1.GetQuotaUsageRequest\x1a\x14.agent.v1.QuotaUsage\x12S\n" +
-	"\x0eRequestRestore\x12\x1f.agent.v1.RequestRestoreRequest\x1a .agent.v1.RequestRestoreResponseB7Z5github.com/example/datavault/pkg/agentpb/v1;agentpbv1b\x06proto3"
+	"\x0eRequestRestore\x12\x1f.agent.v1.RequestRestoreRequest\x1a .agent.v1.RequestRestoreResponse\x12b\n" +
+	"\x13EnrollWebDelegation\x12$.agent.v1.EnrollWebDelegationRequest\x1a%.agent.v1.EnrollWebDelegationResponse\x12b\n" +
+	"\x13RevokeWebDelegation\x12$.agent.v1.RevokeWebDelegationRequest\x1a%.agent.v1.RevokeWebDelegationResponse\x12_\n" +
+	"\x12ListWebDelegations\x12#.agent.v1.ListWebDelegationsRequest\x1a$.agent.v1.ListWebDelegationsResponseB7Z5github.com/example/datavault/pkg/agentpb/v1;agentpbv1b\x06proto3"
 
 var (
 	file_pkg_agentpb_v1_agent_proto_rawDescOnce sync.Once
@@ -1554,72 +1967,86 @@ func file_pkg_agentpb_v1_agent_proto_rawDescGZIP() []byte {
 	return file_pkg_agentpb_v1_agent_proto_rawDescData
 }
 
-var file_pkg_agentpb_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_pkg_agentpb_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_pkg_agentpb_v1_agent_proto_goTypes = []any{
-	(*Rule)(nil),                      // 0: agent.v1.Rule
-	(*AddUserRuleRequest)(nil),        // 1: agent.v1.AddUserRuleRequest
-	(*AddUserRuleResponse)(nil),       // 2: agent.v1.AddUserRuleResponse
-	(*RemoveUserRuleRequest)(nil),     // 3: agent.v1.RemoveUserRuleRequest
-	(*RemoveUserRuleResponse)(nil),    // 4: agent.v1.RemoveUserRuleResponse
-	(*ListUserRulesRequest)(nil),      // 5: agent.v1.ListUserRulesRequest
-	(*ListUserRulesResponse)(nil),     // 6: agent.v1.ListUserRulesResponse
-	(*EnableUserRuleRequest)(nil),     // 7: agent.v1.EnableUserRuleRequest
-	(*EnableUserRuleResponse)(nil),    // 8: agent.v1.EnableUserRuleResponse
-	(*DisableUserRuleRequest)(nil),    // 9: agent.v1.DisableUserRuleRequest
-	(*DisableUserRuleResponse)(nil),   // 10: agent.v1.DisableUserRuleResponse
-	(*AddMachineRuleRequest)(nil),     // 11: agent.v1.AddMachineRuleRequest
-	(*AddMachineRuleResponse)(nil),    // 12: agent.v1.AddMachineRuleResponse
-	(*RemoveMachineRuleRequest)(nil),  // 13: agent.v1.RemoveMachineRuleRequest
-	(*RemoveMachineRuleResponse)(nil), // 14: agent.v1.RemoveMachineRuleResponse
-	(*ListMachineRulesRequest)(nil),   // 15: agent.v1.ListMachineRulesRequest
-	(*ListMachineRulesResponse)(nil),  // 16: agent.v1.ListMachineRulesResponse
-	(*TriggerSyncRequest)(nil),        // 17: agent.v1.TriggerSyncRequest
-	(*TriggerSyncResponse)(nil),       // 18: agent.v1.TriggerSyncResponse
-	(*GetSyncStatusRequest)(nil),      // 19: agent.v1.GetSyncStatusRequest
-	(*SyncStatusUpdate)(nil),          // 20: agent.v1.SyncStatusUpdate
-	(*SyncStats)(nil),                 // 21: agent.v1.SyncStats
-	(*GetAuthChallengeRequest)(nil),   // 22: agent.v1.GetAuthChallengeRequest
-	(*AuthChallenge)(nil),             // 23: agent.v1.AuthChallenge
-	(*GetQuotaUsageRequest)(nil),      // 24: agent.v1.GetQuotaUsageRequest
-	(*QuotaUsage)(nil),                // 25: agent.v1.QuotaUsage
-	(*RequestRestoreRequest)(nil),     // 26: agent.v1.RequestRestoreRequest
-	(*RequestRestoreResponse)(nil),    // 27: agent.v1.RequestRestoreResponse
+	(*Rule)(nil),                        // 0: agent.v1.Rule
+	(*AddUserRuleRequest)(nil),          // 1: agent.v1.AddUserRuleRequest
+	(*AddUserRuleResponse)(nil),         // 2: agent.v1.AddUserRuleResponse
+	(*RemoveUserRuleRequest)(nil),       // 3: agent.v1.RemoveUserRuleRequest
+	(*RemoveUserRuleResponse)(nil),      // 4: agent.v1.RemoveUserRuleResponse
+	(*ListUserRulesRequest)(nil),        // 5: agent.v1.ListUserRulesRequest
+	(*ListUserRulesResponse)(nil),       // 6: agent.v1.ListUserRulesResponse
+	(*EnableUserRuleRequest)(nil),       // 7: agent.v1.EnableUserRuleRequest
+	(*EnableUserRuleResponse)(nil),      // 8: agent.v1.EnableUserRuleResponse
+	(*DisableUserRuleRequest)(nil),      // 9: agent.v1.DisableUserRuleRequest
+	(*DisableUserRuleResponse)(nil),     // 10: agent.v1.DisableUserRuleResponse
+	(*AddMachineRuleRequest)(nil),       // 11: agent.v1.AddMachineRuleRequest
+	(*AddMachineRuleResponse)(nil),      // 12: agent.v1.AddMachineRuleResponse
+	(*RemoveMachineRuleRequest)(nil),    // 13: agent.v1.RemoveMachineRuleRequest
+	(*RemoveMachineRuleResponse)(nil),   // 14: agent.v1.RemoveMachineRuleResponse
+	(*ListMachineRulesRequest)(nil),     // 15: agent.v1.ListMachineRulesRequest
+	(*ListMachineRulesResponse)(nil),    // 16: agent.v1.ListMachineRulesResponse
+	(*TriggerSyncRequest)(nil),          // 17: agent.v1.TriggerSyncRequest
+	(*TriggerSyncResponse)(nil),         // 18: agent.v1.TriggerSyncResponse
+	(*GetSyncStatusRequest)(nil),        // 19: agent.v1.GetSyncStatusRequest
+	(*SyncStatusUpdate)(nil),            // 20: agent.v1.SyncStatusUpdate
+	(*SyncStats)(nil),                   // 21: agent.v1.SyncStats
+	(*GetAuthChallengeRequest)(nil),     // 22: agent.v1.GetAuthChallengeRequest
+	(*AuthChallenge)(nil),               // 23: agent.v1.AuthChallenge
+	(*GetQuotaUsageRequest)(nil),        // 24: agent.v1.GetQuotaUsageRequest
+	(*QuotaUsage)(nil),                  // 25: agent.v1.QuotaUsage
+	(*RequestRestoreRequest)(nil),       // 26: agent.v1.RequestRestoreRequest
+	(*RequestRestoreResponse)(nil),      // 27: agent.v1.RequestRestoreResponse
+	(*EnrollWebDelegationRequest)(nil),  // 28: agent.v1.EnrollWebDelegationRequest
+	(*EnrollWebDelegationResponse)(nil), // 29: agent.v1.EnrollWebDelegationResponse
+	(*RevokeWebDelegationRequest)(nil),  // 30: agent.v1.RevokeWebDelegationRequest
+	(*RevokeWebDelegationResponse)(nil), // 31: agent.v1.RevokeWebDelegationResponse
+	(*ListWebDelegationsRequest)(nil),   // 32: agent.v1.ListWebDelegationsRequest
+	(*ListWebDelegationsResponse)(nil),  // 33: agent.v1.ListWebDelegationsResponse
+	(*WebDelegation)(nil),               // 34: agent.v1.WebDelegation
 }
 var file_pkg_agentpb_v1_agent_proto_depIdxs = []int32{
 	0,  // 0: agent.v1.ListUserRulesResponse.rules:type_name -> agent.v1.Rule
 	0,  // 1: agent.v1.ListMachineRulesResponse.rules:type_name -> agent.v1.Rule
 	21, // 2: agent.v1.SyncStatusUpdate.stats:type_name -> agent.v1.SyncStats
-	1,  // 3: agent.v1.AgentService.AddUserRule:input_type -> agent.v1.AddUserRuleRequest
-	3,  // 4: agent.v1.AgentService.RemoveUserRule:input_type -> agent.v1.RemoveUserRuleRequest
-	5,  // 5: agent.v1.AgentService.ListUserRules:input_type -> agent.v1.ListUserRulesRequest
-	7,  // 6: agent.v1.AgentService.EnableUserRule:input_type -> agent.v1.EnableUserRuleRequest
-	9,  // 7: agent.v1.AgentService.DisableUserRule:input_type -> agent.v1.DisableUserRuleRequest
-	11, // 8: agent.v1.AgentService.AddMachineRule:input_type -> agent.v1.AddMachineRuleRequest
-	13, // 9: agent.v1.AgentService.RemoveMachineRule:input_type -> agent.v1.RemoveMachineRuleRequest
-	15, // 10: agent.v1.AgentService.ListMachineRules:input_type -> agent.v1.ListMachineRulesRequest
-	17, // 11: agent.v1.AgentService.TriggerSync:input_type -> agent.v1.TriggerSyncRequest
-	19, // 12: agent.v1.AgentService.GetSyncStatus:input_type -> agent.v1.GetSyncStatusRequest
-	22, // 13: agent.v1.AgentService.GetAuthChallenge:input_type -> agent.v1.GetAuthChallengeRequest
-	24, // 14: agent.v1.AgentService.GetQuotaUsage:input_type -> agent.v1.GetQuotaUsageRequest
-	26, // 15: agent.v1.AgentService.RequestRestore:input_type -> agent.v1.RequestRestoreRequest
-	2,  // 16: agent.v1.AgentService.AddUserRule:output_type -> agent.v1.AddUserRuleResponse
-	4,  // 17: agent.v1.AgentService.RemoveUserRule:output_type -> agent.v1.RemoveUserRuleResponse
-	6,  // 18: agent.v1.AgentService.ListUserRules:output_type -> agent.v1.ListUserRulesResponse
-	8,  // 19: agent.v1.AgentService.EnableUserRule:output_type -> agent.v1.EnableUserRuleResponse
-	10, // 20: agent.v1.AgentService.DisableUserRule:output_type -> agent.v1.DisableUserRuleResponse
-	12, // 21: agent.v1.AgentService.AddMachineRule:output_type -> agent.v1.AddMachineRuleResponse
-	14, // 22: agent.v1.AgentService.RemoveMachineRule:output_type -> agent.v1.RemoveMachineRuleResponse
-	16, // 23: agent.v1.AgentService.ListMachineRules:output_type -> agent.v1.ListMachineRulesResponse
-	18, // 24: agent.v1.AgentService.TriggerSync:output_type -> agent.v1.TriggerSyncResponse
-	20, // 25: agent.v1.AgentService.GetSyncStatus:output_type -> agent.v1.SyncStatusUpdate
-	23, // 26: agent.v1.AgentService.GetAuthChallenge:output_type -> agent.v1.AuthChallenge
-	25, // 27: agent.v1.AgentService.GetQuotaUsage:output_type -> agent.v1.QuotaUsage
-	27, // 28: agent.v1.AgentService.RequestRestore:output_type -> agent.v1.RequestRestoreResponse
-	16, // [16:29] is the sub-list for method output_type
-	3,  // [3:16] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	34, // 3: agent.v1.ListWebDelegationsResponse.delegations:type_name -> agent.v1.WebDelegation
+	1,  // 4: agent.v1.AgentService.AddUserRule:input_type -> agent.v1.AddUserRuleRequest
+	3,  // 5: agent.v1.AgentService.RemoveUserRule:input_type -> agent.v1.RemoveUserRuleRequest
+	5,  // 6: agent.v1.AgentService.ListUserRules:input_type -> agent.v1.ListUserRulesRequest
+	7,  // 7: agent.v1.AgentService.EnableUserRule:input_type -> agent.v1.EnableUserRuleRequest
+	9,  // 8: agent.v1.AgentService.DisableUserRule:input_type -> agent.v1.DisableUserRuleRequest
+	11, // 9: agent.v1.AgentService.AddMachineRule:input_type -> agent.v1.AddMachineRuleRequest
+	13, // 10: agent.v1.AgentService.RemoveMachineRule:input_type -> agent.v1.RemoveMachineRuleRequest
+	15, // 11: agent.v1.AgentService.ListMachineRules:input_type -> agent.v1.ListMachineRulesRequest
+	17, // 12: agent.v1.AgentService.TriggerSync:input_type -> agent.v1.TriggerSyncRequest
+	19, // 13: agent.v1.AgentService.GetSyncStatus:input_type -> agent.v1.GetSyncStatusRequest
+	22, // 14: agent.v1.AgentService.GetAuthChallenge:input_type -> agent.v1.GetAuthChallengeRequest
+	24, // 15: agent.v1.AgentService.GetQuotaUsage:input_type -> agent.v1.GetQuotaUsageRequest
+	26, // 16: agent.v1.AgentService.RequestRestore:input_type -> agent.v1.RequestRestoreRequest
+	28, // 17: agent.v1.AgentService.EnrollWebDelegation:input_type -> agent.v1.EnrollWebDelegationRequest
+	30, // 18: agent.v1.AgentService.RevokeWebDelegation:input_type -> agent.v1.RevokeWebDelegationRequest
+	32, // 19: agent.v1.AgentService.ListWebDelegations:input_type -> agent.v1.ListWebDelegationsRequest
+	2,  // 20: agent.v1.AgentService.AddUserRule:output_type -> agent.v1.AddUserRuleResponse
+	4,  // 21: agent.v1.AgentService.RemoveUserRule:output_type -> agent.v1.RemoveUserRuleResponse
+	6,  // 22: agent.v1.AgentService.ListUserRules:output_type -> agent.v1.ListUserRulesResponse
+	8,  // 23: agent.v1.AgentService.EnableUserRule:output_type -> agent.v1.EnableUserRuleResponse
+	10, // 24: agent.v1.AgentService.DisableUserRule:output_type -> agent.v1.DisableUserRuleResponse
+	12, // 25: agent.v1.AgentService.AddMachineRule:output_type -> agent.v1.AddMachineRuleResponse
+	14, // 26: agent.v1.AgentService.RemoveMachineRule:output_type -> agent.v1.RemoveMachineRuleResponse
+	16, // 27: agent.v1.AgentService.ListMachineRules:output_type -> agent.v1.ListMachineRulesResponse
+	18, // 28: agent.v1.AgentService.TriggerSync:output_type -> agent.v1.TriggerSyncResponse
+	20, // 29: agent.v1.AgentService.GetSyncStatus:output_type -> agent.v1.SyncStatusUpdate
+	23, // 30: agent.v1.AgentService.GetAuthChallenge:output_type -> agent.v1.AuthChallenge
+	25, // 31: agent.v1.AgentService.GetQuotaUsage:output_type -> agent.v1.QuotaUsage
+	27, // 32: agent.v1.AgentService.RequestRestore:output_type -> agent.v1.RequestRestoreResponse
+	29, // 33: agent.v1.AgentService.EnrollWebDelegation:output_type -> agent.v1.EnrollWebDelegationResponse
+	31, // 34: agent.v1.AgentService.RevokeWebDelegation:output_type -> agent.v1.RevokeWebDelegationResponse
+	33, // 35: agent.v1.AgentService.ListWebDelegations:output_type -> agent.v1.ListWebDelegationsResponse
+	20, // [20:36] is the sub-list for method output_type
+	4,  // [4:20] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_pkg_agentpb_v1_agent_proto_init() }
@@ -1633,7 +2060,7 @@ func file_pkg_agentpb_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_agentpb_v1_agent_proto_rawDesc), len(file_pkg_agentpb_v1_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   28,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
