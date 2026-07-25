@@ -10,6 +10,9 @@ service BackupService {
   rpc PushBackup(stream BackupBatch) returns (stream BatchAck);
   rpc GetQuotaUsage(GetQuotaUsageRequest) returns (QuotaUsage);
   rpc PullRestore(PullRestoreRequest) returns (stream RestoreBatch);
+  rpc RegisterDelegationKey(RegisterDelegationKeyRequest) returns (RegisterDelegationKeyResponse);
+  rpc RemoveDelegationKey(RemoveDelegationKeyRequest) returns (RemoveDelegationKeyResponse);
+  rpc RegisterTaskGrant(RegisterTaskGrantRequest) returns (RegisterTaskGrantResponse);
 }
 
 message GetChallengeRequest {}
@@ -50,6 +53,7 @@ message BackupBatch {
   repeated FileEntry files = 4;
   bytes signature = 5; // SSH signature: nonce || "PushBackup" || sha256(payload)
   bytes nonce = 6;
+  bytes signer_pubkey = 7; // set when batches are signed by an ephemeral task key
 }
 
 message FileEntry {
@@ -90,3 +94,39 @@ message RestoreBatch {
   repeated FileEntry files = 2;
   bool is_last = 3;
 }
+
+// Delegation key enrollment. The signature is produced by the user's primary
+// authorized key over DelegationConsentPayload (see pkg/auth) and proves user
+// consent; the Server verifies it before recording the delegation key.
+message RegisterDelegationKeyRequest {
+  string username = 1;
+  string gateway_cn = 2;
+  string delegation_pubkey = 3; // authorized_keys format
+  int64 expires_at = 4; // unix timestamp
+  bytes nonce = 5;
+  bytes signature = 6;
+}
+message RegisterDelegationKeyResponse {}
+
+// Removal may be signed by the user's primary key or by the delegation key
+// itself (a gateway revoking its own access).
+message RemoveDelegationKeyRequest {
+  string username = 1;
+  string gateway_cn = 2;
+  string delegation_pubkey = 3;
+  bytes nonce = 4;
+  bytes signature = 5;
+}
+message RemoveDelegationKeyResponse {}
+
+// A task grant authorizes one ephemeral public key to sign PushBackup batches
+// for one host/user until expires_at. Signed by an enrolled delegation key.
+message RegisterTaskGrantRequest {
+  string username = 1;
+  string method = 2; // "PushBackup"
+  string ephemeral_pubkey = 3; // authorized_keys format
+  int64 expires_at = 4;
+  bytes nonce = 5;
+  bytes signature = 6;
+}
+message RegisterTaskGrantResponse {}

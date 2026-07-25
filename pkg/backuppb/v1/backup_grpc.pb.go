@@ -19,11 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	BackupService_GetChallenge_FullMethodName    = "/backup.v1.BackupService/GetChallenge"
-	BackupService_GetGlobalConfig_FullMethodName = "/backup.v1.BackupService/GetGlobalConfig"
-	BackupService_PushBackup_FullMethodName      = "/backup.v1.BackupService/PushBackup"
-	BackupService_GetQuotaUsage_FullMethodName   = "/backup.v1.BackupService/GetQuotaUsage"
-	BackupService_PullRestore_FullMethodName     = "/backup.v1.BackupService/PullRestore"
+	BackupService_GetChallenge_FullMethodName          = "/backup.v1.BackupService/GetChallenge"
+	BackupService_GetGlobalConfig_FullMethodName       = "/backup.v1.BackupService/GetGlobalConfig"
+	BackupService_PushBackup_FullMethodName            = "/backup.v1.BackupService/PushBackup"
+	BackupService_GetQuotaUsage_FullMethodName         = "/backup.v1.BackupService/GetQuotaUsage"
+	BackupService_PullRestore_FullMethodName           = "/backup.v1.BackupService/PullRestore"
+	BackupService_RegisterDelegationKey_FullMethodName = "/backup.v1.BackupService/RegisterDelegationKey"
+	BackupService_RemoveDelegationKey_FullMethodName   = "/backup.v1.BackupService/RemoveDelegationKey"
+	BackupService_RegisterTaskGrant_FullMethodName     = "/backup.v1.BackupService/RegisterTaskGrant"
 )
 
 // BackupServiceClient is the client API for BackupService service.
@@ -35,6 +38,9 @@ type BackupServiceClient interface {
 	PushBackup(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[BackupBatch, BatchAck], error)
 	GetQuotaUsage(ctx context.Context, in *GetQuotaUsageRequest, opts ...grpc.CallOption) (*QuotaUsage, error)
 	PullRestore(ctx context.Context, in *PullRestoreRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RestoreBatch], error)
+	RegisterDelegationKey(ctx context.Context, in *RegisterDelegationKeyRequest, opts ...grpc.CallOption) (*RegisterDelegationKeyResponse, error)
+	RemoveDelegationKey(ctx context.Context, in *RemoveDelegationKeyRequest, opts ...grpc.CallOption) (*RemoveDelegationKeyResponse, error)
+	RegisterTaskGrant(ctx context.Context, in *RegisterTaskGrantRequest, opts ...grpc.CallOption) (*RegisterTaskGrantResponse, error)
 }
 
 type backupServiceClient struct {
@@ -107,6 +113,36 @@ func (c *backupServiceClient) PullRestore(ctx context.Context, in *PullRestoreRe
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type BackupService_PullRestoreClient = grpc.ServerStreamingClient[RestoreBatch]
 
+func (c *backupServiceClient) RegisterDelegationKey(ctx context.Context, in *RegisterDelegationKeyRequest, opts ...grpc.CallOption) (*RegisterDelegationKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterDelegationKeyResponse)
+	err := c.cc.Invoke(ctx, BackupService_RegisterDelegationKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *backupServiceClient) RemoveDelegationKey(ctx context.Context, in *RemoveDelegationKeyRequest, opts ...grpc.CallOption) (*RemoveDelegationKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RemoveDelegationKeyResponse)
+	err := c.cc.Invoke(ctx, BackupService_RemoveDelegationKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *backupServiceClient) RegisterTaskGrant(ctx context.Context, in *RegisterTaskGrantRequest, opts ...grpc.CallOption) (*RegisterTaskGrantResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterTaskGrantResponse)
+	err := c.cc.Invoke(ctx, BackupService_RegisterTaskGrant_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BackupServiceServer is the server API for BackupService service.
 // All implementations must embed UnimplementedBackupServiceServer
 // for forward compatibility.
@@ -116,6 +152,9 @@ type BackupServiceServer interface {
 	PushBackup(grpc.BidiStreamingServer[BackupBatch, BatchAck]) error
 	GetQuotaUsage(context.Context, *GetQuotaUsageRequest) (*QuotaUsage, error)
 	PullRestore(*PullRestoreRequest, grpc.ServerStreamingServer[RestoreBatch]) error
+	RegisterDelegationKey(context.Context, *RegisterDelegationKeyRequest) (*RegisterDelegationKeyResponse, error)
+	RemoveDelegationKey(context.Context, *RemoveDelegationKeyRequest) (*RemoveDelegationKeyResponse, error)
+	RegisterTaskGrant(context.Context, *RegisterTaskGrantRequest) (*RegisterTaskGrantResponse, error)
 	mustEmbedUnimplementedBackupServiceServer()
 }
 
@@ -140,6 +179,15 @@ func (UnimplementedBackupServiceServer) GetQuotaUsage(context.Context, *GetQuota
 }
 func (UnimplementedBackupServiceServer) PullRestore(*PullRestoreRequest, grpc.ServerStreamingServer[RestoreBatch]) error {
 	return status.Error(codes.Unimplemented, "method PullRestore not implemented")
+}
+func (UnimplementedBackupServiceServer) RegisterDelegationKey(context.Context, *RegisterDelegationKeyRequest) (*RegisterDelegationKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterDelegationKey not implemented")
+}
+func (UnimplementedBackupServiceServer) RemoveDelegationKey(context.Context, *RemoveDelegationKeyRequest) (*RemoveDelegationKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveDelegationKey not implemented")
+}
+func (UnimplementedBackupServiceServer) RegisterTaskGrant(context.Context, *RegisterTaskGrantRequest) (*RegisterTaskGrantResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterTaskGrant not implemented")
 }
 func (UnimplementedBackupServiceServer) mustEmbedUnimplementedBackupServiceServer() {}
 func (UnimplementedBackupServiceServer) testEmbeddedByValue()                       {}
@@ -234,6 +282,60 @@ func _BackupService_PullRestore_Handler(srv interface{}, stream grpc.ServerStrea
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type BackupService_PullRestoreServer = grpc.ServerStreamingServer[RestoreBatch]
 
+func _BackupService_RegisterDelegationKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterDelegationKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BackupServiceServer).RegisterDelegationKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BackupService_RegisterDelegationKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BackupServiceServer).RegisterDelegationKey(ctx, req.(*RegisterDelegationKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BackupService_RemoveDelegationKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveDelegationKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BackupServiceServer).RemoveDelegationKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BackupService_RemoveDelegationKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BackupServiceServer).RemoveDelegationKey(ctx, req.(*RemoveDelegationKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BackupService_RegisterTaskGrant_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterTaskGrantRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BackupServiceServer).RegisterTaskGrant(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: BackupService_RegisterTaskGrant_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BackupServiceServer).RegisterTaskGrant(ctx, req.(*RegisterTaskGrantRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BackupService_ServiceDesc is the grpc.ServiceDesc for BackupService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -252,6 +354,18 @@ var BackupService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetQuotaUsage",
 			Handler:    _BackupService_GetQuotaUsage_Handler,
+		},
+		{
+			MethodName: "RegisterDelegationKey",
+			Handler:    _BackupService_RegisterDelegationKey_Handler,
+		},
+		{
+			MethodName: "RemoveDelegationKey",
+			Handler:    _BackupService_RemoveDelegationKey_Handler,
+		},
+		{
+			MethodName: "RegisterTaskGrant",
+			Handler:    _BackupService_RegisterTaskGrant_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
