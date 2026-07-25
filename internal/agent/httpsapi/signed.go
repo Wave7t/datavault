@@ -53,7 +53,8 @@ func (s *Server) extractSigned(w http.ResponseWriter, r *http.Request, id identi
 	}
 	pubKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(d.DelegationPubKey))
 	if err != nil {
-		writeInternal(w, s.log(), "parse delegation key", err)
+		s.log().Printf("httpsapi: corrupt delegation key for user=%q gateway=%q: %v", id.Username, id.GatewayCN, err)
+		writeDelegationRequired(w)
 		return nil, false
 	}
 	var sig ssh.Signature

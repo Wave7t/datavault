@@ -201,6 +201,66 @@ func TestChallengeAndSignedQuota(t *testing.T) {
 	}
 }
 
+func TestExtractSignedCorruptStoredKey(t *testing.T) {
+	cur, err := user.Current()
+	if err != nil {
+		t.Skip("cannot get current user:", err)
+	}
+
+	db, err := store.OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := store.MigrateWebDelegations(db); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now()
+	if err := store.UpsertWebDelegation(db, store.WebDelegation{
+		Username:         cur.Username,
+		GatewayCN:        "gateway1",
+		DelegationPubKey: "not-a-real-key",
+		ExpiresAt:        now.Add(time.Hour),
+		CreatedAt:        now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.AgentConfig{
+		HTTPSAPI: &config.HTTPSAPIConfig{
+			Listen:     ":0",
+			CertFile:   "/dev/null",
+			KeyFile:    "/dev/null",
+			CAFile:     "/dev/null",
+			GatewayCNs: []string{"gateway1"},
+			MinUID:     0,
+		},
+	}
+
+	s := mustServerWithDeps(t, Deps{
+		Cfg:           cfg,
+		DB:            db,
+		UserRuleStore: rules.NewUserRuleStore(t.TempDir()),
+	})
+
+	// Make a signed request with any base64 nonce/signature headers
+	quotaPath := "/v1/users/" + cur.Username + "/quota"
+	req := makeRequest(t, http.MethodGet, quotaPath, nil)
+	req.SetPathValue("user", cur.Username)
+	req.Header.Set("X-Datavault-Nonce", base64.StdEncoding.EncodeToString([]byte("any-nonce")))
+	req.Header.Set("X-Datavault-Signature", base64.StdEncoding.EncodeToString([]byte("any-sig")))
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for corrupt stored key, got %d: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"code":"delegation_required"`) {
+		t.Fatalf("expected delegation_required code, got %s", body)
+	}
+}
+
 func TestSignedSyncRegistersGrantAndRuns(t *testing.T) {
 	cur, err := user.Current()
 	if err != nil {
