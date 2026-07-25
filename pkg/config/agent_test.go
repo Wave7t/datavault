@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadAgentConfig(t *testing.T) {
@@ -164,5 +165,66 @@ schedule_window:
 	}
 	if cfg.BandwidthLimitBytesPerSecond != 1048576 || cfg.ScheduleWindow == nil {
 		t.Fatalf("unexpected operational config: %#v", cfg)
+	}
+}
+
+func TestLoadAgentConfigHTTPSAPI(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(`
+agent:
+  cert_file: /etc/datavault/agent/cert.pem
+  key_file: /etc/datavault/agent/key.pem
+  ca_file: /etc/datavault/agent/ca.pem
+servers:
+  - address: backup-server:8443
+https_api:
+  listen: "10.0.0.5:8443"
+  cert_file: /etc/datavault/agent/https.crt
+  key_file: /etc/datavault/agent/https.key
+  ca_file: /etc/datavault/agent/ca.crt
+  gateway_cns: ["backup-web-01"]
+`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadAgentConfig(path)
+	if err != nil {
+		t.Fatalf("LoadAgentConfig: %v", err)
+	}
+	if cfg.HTTPSAPI == nil {
+		t.Fatal("https_api not parsed")
+	}
+	if cfg.HTTPSAPI.DelegationTTL != 720*time.Hour {
+		t.Fatalf("default ttl: %v", cfg.HTTPSAPI.DelegationTTL)
+	}
+	if cfg.HTTPSAPI.MinUID != 1000 {
+		t.Fatalf("default min_uid: %v", cfg.HTTPSAPI.MinUID)
+	}
+}
+
+func TestLoadAgentConfigHTTPSAPIValidation(t *testing.T) {
+	base := `
+agent:
+  cert_file: /etc/datavault/agent/cert.pem
+  key_file: /etc/datavault/agent/key.pem
+  ca_file: /etc/datavault/agent/ca.pem
+servers:
+  - address: backup-server:8443
+`
+	cases := map[string]string{
+		"missing listen": `
+https_api: {cert_file: /a, key_file: /b, ca_file: /c, gateway_cns: [gw]}`,
+		"missing gateway_cns": `
+https_api: {listen: ":8443", cert_file: /a, key_file: /b, ca_file: /c}`,
+		"negative ttl": `
+https_api: {listen: ":8443", cert_file: /a, key_file: /b, ca_file: /c, gateway_cns: [gw], delegation_ttl: -1s}`,
+	}
+	for name, extra := range cases {
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte(base+extra), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := LoadAgentConfig(path); err == nil {
+			t.Fatalf("%s: expected error", name)
+		}
 	}
 }

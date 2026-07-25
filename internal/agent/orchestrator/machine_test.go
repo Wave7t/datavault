@@ -101,12 +101,12 @@ func TestGetTrackerForUserRestrictsTaskOwnership(t *testing.T) {
 
 func TestResolveServerRequiresConfiguredAddress(t *testing.T) {
 	o := New(&config.AgentConfig{Servers: []config.ServerEntry{{Address: "primary:8443"}, {Address: "secondary:8443"}}}, nil, nil, nil)
-	if server, err := o.resolveServer("secondary:8443"); err != nil || server.Address != "secondary:8443" {
+	if server, err := o.ResolveServer("secondary:8443"); err != nil || server.Address != "secondary:8443" {
 		t.Fatalf("resolve configured server = %#v, %v", server, err)
 	}
 	for _, address := range []string{"", "attacker:8443"} {
-		if _, err := o.resolveServer(address); err == nil {
-			t.Fatalf("resolveServer(%q) unexpectedly succeeded", address)
+		if _, err := o.ResolveServer(address); err == nil {
+			t.Fatalf("ResolveServer(%q) unexpectedly succeeded", address)
 		}
 	}
 }

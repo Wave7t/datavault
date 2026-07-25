@@ -2,17 +2,17 @@ package svc
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
+	"time"
 
 	"github.com/example/datavault/internal/server/middleware"
+	"github.com/example/datavault/pkg/auth"
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 	"github.com/example/datavault/pkg/store"
 	"github.com/example/datavault/pkg/zfs"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 )
 
 // GetQuotaUsage returns the current disk usage and quota for a user's dataset.
@@ -57,30 +57,22 @@ func (s *BackupServer) verifyQuotaSignature(hostname string, req *backuppbv1.Get
 		return status.Error(codes.Unauthenticated, "missing quota signature")
 	}
 
-	pubKey, err := middleware.LoadAuthorizedKey(s.KeysDir, hostname, req.Username)
+	keys, err := middleware.LoadSigningKeys(s.KeysDir, hostname, req.Username, time.Now())
 	if err != nil {
 		return status.Errorf(codes.Unauthenticated, "no authorized key for %s/%s: %v", hostname, req.Username, err)
 	}
 
-	requestForHash := proto.Clone(req).(*backuppbv1.GetQuotaUsageRequest)
-	requestForHash.Signature = nil
-	requestForHash.Nonce = nil
-
-	data, err := proto.Marshal(requestForHash)
+	payload, err := auth.ServerRequestPayload("GetQuotaUsage", req.Nonce, req)
 	if err != nil {
-		return status.Errorf(codes.Internal, "marshal quota request: %v", err)
+		return status.Errorf(codes.Internal, "build quota payload: %v", err)
 	}
-	hash := sha256.Sum256(data)
-
-	payload := append(req.Nonce, []byte("GetQuotaUsage")...)
-	payload = append(payload, hash[:]...)
 
 	var sig ssh.Signature
 	if err := ssh.Unmarshal(req.Signature, &sig); err != nil {
 		return status.Error(codes.Unauthenticated, "invalid signature format")
 	}
-	if err := pubKey.Verify(payload, &sig); err != nil {
-		return status.Errorf(codes.Unauthenticated, "signature verification failed: %v", err)
+	if !middleware.VerifyAnyKey(keys, payload, &sig) {
+		return status.Error(codes.Unauthenticated, "signature verification failed")
 	}
 	return nil
 }

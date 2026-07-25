@@ -9,7 +9,7 @@ import (
 )
 
 func (s *AgentService) GetAuthChallenge(ctx context.Context, req *agentpbv1.GetAuthChallengeRequest) (*agentpbv1.AuthChallenge, error) {
-	if req.Method != "GetQuotaUsage" && req.Method != "PullRestore" {
+	if req.Method != "GetQuotaUsage" && req.Method != "PullRestore" && req.Method != "RegisterDelegationKey" && req.Method != "RemoveDelegationKey" {
 		return nil, status.Error(codes.InvalidArgument, "unsupported auth challenge method")
 	}
 	username, err := s.extractUsername(ctx)

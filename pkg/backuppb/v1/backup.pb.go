@@ -385,6 +385,7 @@ type BackupBatch struct {
 	Files         []*FileEntry           `protobuf:"bytes,4,rep,name=files,proto3" json:"files,omitempty"`
 	Signature     []byte                 `protobuf:"bytes,5,opt,name=signature,proto3" json:"signature,omitempty"` // SSH signature: nonce || "PushBackup" || sha256(payload)
 	Nonce         []byte                 `protobuf:"bytes,6,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	SignerPubkey  []byte                 `protobuf:"bytes,7,opt,name=signer_pubkey,json=signerPubkey,proto3" json:"signer_pubkey,omitempty"` // set when batches are signed by an ephemeral task key
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -457,6 +458,13 @@ func (x *BackupBatch) GetSignature() []byte {
 func (x *BackupBatch) GetNonce() []byte {
 	if x != nil {
 		return x.Nonce
+	}
+	return nil
+}
+
+func (x *BackupBatch) GetSignerPubkey() []byte {
+	if x != nil {
+		return x.SignerPubkey
 	}
 	return nil
 }
@@ -861,6 +869,365 @@ func (x *RestoreBatch) GetIsLast() bool {
 	return false
 }
 
+// Delegation key enrollment. The signature is produced by the user's primary
+// authorized key over DelegationConsentPayload (see pkg/auth) and proves user
+// consent; the Server verifies it before recording the delegation key.
+type RegisterDelegationKeyRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Username         string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	GatewayCn        string                 `protobuf:"bytes,2,opt,name=gateway_cn,json=gatewayCn,proto3" json:"gateway_cn,omitempty"`
+	DelegationPubkey string                 `protobuf:"bytes,3,opt,name=delegation_pubkey,json=delegationPubkey,proto3" json:"delegation_pubkey,omitempty"` // authorized_keys format
+	ExpiresAt        int64                  `protobuf:"varint,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`                     // unix timestamp
+	Nonce            []byte                 `protobuf:"bytes,5,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Signature        []byte                 `protobuf:"bytes,6,opt,name=signature,proto3" json:"signature,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RegisterDelegationKeyRequest) Reset() {
+	*x = RegisterDelegationKeyRequest{}
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterDelegationKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterDelegationKeyRequest) ProtoMessage() {}
+
+func (x *RegisterDelegationKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterDelegationKeyRequest.ProtoReflect.Descriptor instead.
+func (*RegisterDelegationKeyRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_backuppb_v1_backup_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RegisterDelegationKeyRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *RegisterDelegationKeyRequest) GetGatewayCn() string {
+	if x != nil {
+		return x.GatewayCn
+	}
+	return ""
+}
+
+func (x *RegisterDelegationKeyRequest) GetDelegationPubkey() string {
+	if x != nil {
+		return x.DelegationPubkey
+	}
+	return ""
+}
+
+func (x *RegisterDelegationKeyRequest) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *RegisterDelegationKeyRequest) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *RegisterDelegationKeyRequest) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+type RegisterDelegationKeyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterDelegationKeyResponse) Reset() {
+	*x = RegisterDelegationKeyResponse{}
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterDelegationKeyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterDelegationKeyResponse) ProtoMessage() {}
+
+func (x *RegisterDelegationKeyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterDelegationKeyResponse.ProtoReflect.Descriptor instead.
+func (*RegisterDelegationKeyResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_backuppb_v1_backup_proto_rawDescGZIP(), []int{15}
+}
+
+// Removal may be signed by the user's primary key or by the delegation key
+// itself (a gateway revoking its own access).
+type RemoveDelegationKeyRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Username         string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	GatewayCn        string                 `protobuf:"bytes,2,opt,name=gateway_cn,json=gatewayCn,proto3" json:"gateway_cn,omitempty"`
+	DelegationPubkey string                 `protobuf:"bytes,3,opt,name=delegation_pubkey,json=delegationPubkey,proto3" json:"delegation_pubkey,omitempty"`
+	Nonce            []byte                 `protobuf:"bytes,4,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Signature        []byte                 `protobuf:"bytes,5,opt,name=signature,proto3" json:"signature,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RemoveDelegationKeyRequest) Reset() {
+	*x = RemoveDelegationKeyRequest{}
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveDelegationKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveDelegationKeyRequest) ProtoMessage() {}
+
+func (x *RemoveDelegationKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveDelegationKeyRequest.ProtoReflect.Descriptor instead.
+func (*RemoveDelegationKeyRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_backuppb_v1_backup_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *RemoveDelegationKeyRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *RemoveDelegationKeyRequest) GetGatewayCn() string {
+	if x != nil {
+		return x.GatewayCn
+	}
+	return ""
+}
+
+func (x *RemoveDelegationKeyRequest) GetDelegationPubkey() string {
+	if x != nil {
+		return x.DelegationPubkey
+	}
+	return ""
+}
+
+func (x *RemoveDelegationKeyRequest) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *RemoveDelegationKeyRequest) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+type RemoveDelegationKeyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveDelegationKeyResponse) Reset() {
+	*x = RemoveDelegationKeyResponse{}
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveDelegationKeyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveDelegationKeyResponse) ProtoMessage() {}
+
+func (x *RemoveDelegationKeyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveDelegationKeyResponse.ProtoReflect.Descriptor instead.
+func (*RemoveDelegationKeyResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_backuppb_v1_backup_proto_rawDescGZIP(), []int{17}
+}
+
+// A task grant authorizes one ephemeral public key to sign PushBackup batches
+// for one host/user until expires_at. Signed by an enrolled delegation key.
+type RegisterTaskGrantRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Username        string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Method          string                 `protobuf:"bytes,2,opt,name=method,proto3" json:"method,omitempty"`                                          // "PushBackup"
+	EphemeralPubkey string                 `protobuf:"bytes,3,opt,name=ephemeral_pubkey,json=ephemeralPubkey,proto3" json:"ephemeral_pubkey,omitempty"` // authorized_keys format
+	ExpiresAt       int64                  `protobuf:"varint,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	Nonce           []byte                 `protobuf:"bytes,5,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	Signature       []byte                 `protobuf:"bytes,6,opt,name=signature,proto3" json:"signature,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *RegisterTaskGrantRequest) Reset() {
+	*x = RegisterTaskGrantRequest{}
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterTaskGrantRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterTaskGrantRequest) ProtoMessage() {}
+
+func (x *RegisterTaskGrantRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterTaskGrantRequest.ProtoReflect.Descriptor instead.
+func (*RegisterTaskGrantRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_backuppb_v1_backup_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RegisterTaskGrantRequest) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *RegisterTaskGrantRequest) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *RegisterTaskGrantRequest) GetEphemeralPubkey() string {
+	if x != nil {
+		return x.EphemeralPubkey
+	}
+	return ""
+}
+
+func (x *RegisterTaskGrantRequest) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
+}
+
+func (x *RegisterTaskGrantRequest) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+func (x *RegisterTaskGrantRequest) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+type RegisterTaskGrantResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterTaskGrantResponse) Reset() {
+	*x = RegisterTaskGrantResponse{}
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterTaskGrantResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterTaskGrantResponse) ProtoMessage() {}
+
+func (x *RegisterTaskGrantResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_backuppb_v1_backup_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterTaskGrantResponse.ProtoReflect.Descriptor instead.
+func (*RegisterTaskGrantResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_backuppb_v1_backup_proto_rawDescGZIP(), []int{19}
+}
+
 var File_pkg_backuppb_v1_backup_proto protoreflect.FileDescriptor
 
 const file_pkg_backuppb_v1_backup_proto_rawDesc = "" +
@@ -892,14 +1259,15 @@ const file_pkg_backuppb_v1_backup_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x17.backup.v1.UserOverrideR\x05value:\x028\x01\"E\n" +
 	"\fUserOverride\x12\x19\n" +
 	"\bquota_gb\x18\x01 \x01(\x03R\aquotaGb\x12\x1a\n" +
-	"\bschedule\x18\x02 \x01(\tR\bschedule\"\xc1\x01\n" +
+	"\bschedule\x18\x02 \x01(\tR\bschedule\"\xe6\x01\n" +
 	"\vBackupBatch\x12\x19\n" +
 	"\bbatch_id\x18\x01 \x01(\tR\abatchId\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x1b\n" +
 	"\trule_type\x18\x03 \x01(\tR\bruleType\x12*\n" +
 	"\x05files\x18\x04 \x03(\v2\x14.backup.v1.FileEntryR\x05files\x12\x1c\n" +
 	"\tsignature\x18\x05 \x01(\fR\tsignature\x12\x14\n" +
-	"\x05nonce\x18\x06 \x01(\fR\x05nonce\"\xc5\x01\n" +
+	"\x05nonce\x18\x06 \x01(\fR\x05nonce\x12#\n" +
+	"\rsigner_pubkey\x18\a \x01(\fR\fsignerPubkey\"\xc5\x01\n" +
 	"\tFileEntry\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\fR\acontent\x12\x12\n" +
@@ -932,14 +1300,44 @@ const file_pkg_backuppb_v1_backup_proto_rawDesc = "" +
 	"\fRestoreBatch\x12\x19\n" +
 	"\bbatch_id\x18\x01 \x01(\tR\abatchId\x12*\n" +
 	"\x05files\x18\x02 \x03(\v2\x14.backup.v1.FileEntryR\x05files\x12\x17\n" +
-	"\ais_last\x18\x03 \x01(\bR\x06isLast2\xf5\x02\n" +
+	"\ais_last\x18\x03 \x01(\bR\x06isLast\"\xd9\x01\n" +
+	"\x1cRegisterDelegationKeyRequest\x12\x1a\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x1d\n" +
+	"\n" +
+	"gateway_cn\x18\x02 \x01(\tR\tgatewayCn\x12+\n" +
+	"\x11delegation_pubkey\x18\x03 \x01(\tR\x10delegationPubkey\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x04 \x01(\x03R\texpiresAt\x12\x14\n" +
+	"\x05nonce\x18\x05 \x01(\fR\x05nonce\x12\x1c\n" +
+	"\tsignature\x18\x06 \x01(\fR\tsignature\"\x1f\n" +
+	"\x1dRegisterDelegationKeyResponse\"\xb8\x01\n" +
+	"\x1aRemoveDelegationKeyRequest\x12\x1a\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x1d\n" +
+	"\n" +
+	"gateway_cn\x18\x02 \x01(\tR\tgatewayCn\x12+\n" +
+	"\x11delegation_pubkey\x18\x03 \x01(\tR\x10delegationPubkey\x12\x14\n" +
+	"\x05nonce\x18\x04 \x01(\fR\x05nonce\x12\x1c\n" +
+	"\tsignature\x18\x05 \x01(\fR\tsignature\"\x1d\n" +
+	"\x1bRemoveDelegationKeyResponse\"\xcc\x01\n" +
+	"\x18RegisterTaskGrantRequest\x12\x1a\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x16\n" +
+	"\x06method\x18\x02 \x01(\tR\x06method\x12)\n" +
+	"\x10ephemeral_pubkey\x18\x03 \x01(\tR\x0fephemeralPubkey\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x04 \x01(\x03R\texpiresAt\x12\x14\n" +
+	"\x05nonce\x18\x05 \x01(\fR\x05nonce\x12\x1c\n" +
+	"\tsignature\x18\x06 \x01(\fR\tsignature\"\x1b\n" +
+	"\x19RegisterTaskGrantResponse2\xa7\x05\n" +
 	"\rBackupService\x12D\n" +
 	"\fGetChallenge\x12\x1e.backup.v1.GetChallengeRequest\x1a\x14.backup.v1.Challenge\x12M\n" +
 	"\x0fGetGlobalConfig\x12!.backup.v1.GetGlobalConfigRequest\x1a\x17.backup.v1.GlobalConfig\x12=\n" +
 	"\n" +
 	"PushBackup\x12\x16.backup.v1.BackupBatch\x1a\x13.backup.v1.BatchAck(\x010\x01\x12G\n" +
 	"\rGetQuotaUsage\x12\x1f.backup.v1.GetQuotaUsageRequest\x1a\x15.backup.v1.QuotaUsage\x12G\n" +
-	"\vPullRestore\x12\x1d.backup.v1.PullRestoreRequest\x1a\x17.backup.v1.RestoreBatch0\x01B9Z7github.com/example/datavault/pkg/backuppb/v1;backuppbv1b\x06proto3"
+	"\vPullRestore\x12\x1d.backup.v1.PullRestoreRequest\x1a\x17.backup.v1.RestoreBatch0\x01\x12j\n" +
+	"\x15RegisterDelegationKey\x12'.backup.v1.RegisterDelegationKeyRequest\x1a(.backup.v1.RegisterDelegationKeyResponse\x12d\n" +
+	"\x13RemoveDelegationKey\x12%.backup.v1.RemoveDelegationKeyRequest\x1a&.backup.v1.RemoveDelegationKeyResponse\x12^\n" +
+	"\x11RegisterTaskGrant\x12#.backup.v1.RegisterTaskGrantRequest\x1a$.backup.v1.RegisterTaskGrantResponseB9Z7github.com/example/datavault/pkg/backuppb/v1;backuppbv1b\x06proto3"
 
 var (
 	file_pkg_backuppb_v1_backup_proto_rawDescOnce sync.Once
@@ -953,28 +1351,34 @@ func file_pkg_backuppb_v1_backup_proto_rawDescGZIP() []byte {
 	return file_pkg_backuppb_v1_backup_proto_rawDescData
 }
 
-var file_pkg_backuppb_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_pkg_backuppb_v1_backup_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_pkg_backuppb_v1_backup_proto_goTypes = []any{
-	(*GetChallengeRequest)(nil),    // 0: backup.v1.GetChallengeRequest
-	(*Challenge)(nil),              // 1: backup.v1.Challenge
-	(*GetGlobalConfigRequest)(nil), // 2: backup.v1.GetGlobalConfigRequest
-	(*GlobalConfig)(nil),           // 3: backup.v1.GlobalConfig
-	(*GlobalRule)(nil),             // 4: backup.v1.GlobalRule
-	(*UserPolicy)(nil),             // 5: backup.v1.UserPolicy
-	(*UserOverride)(nil),           // 6: backup.v1.UserOverride
-	(*BackupBatch)(nil),            // 7: backup.v1.BackupBatch
-	(*FileEntry)(nil),              // 8: backup.v1.FileEntry
-	(*BatchAck)(nil),               // 9: backup.v1.BatchAck
-	(*GetQuotaUsageRequest)(nil),   // 10: backup.v1.GetQuotaUsageRequest
-	(*QuotaUsage)(nil),             // 11: backup.v1.QuotaUsage
-	(*PullRestoreRequest)(nil),     // 12: backup.v1.PullRestoreRequest
-	(*RestoreBatch)(nil),           // 13: backup.v1.RestoreBatch
-	nil,                            // 14: backup.v1.UserPolicy.PerUserOverridesEntry
+	(*GetChallengeRequest)(nil),           // 0: backup.v1.GetChallengeRequest
+	(*Challenge)(nil),                     // 1: backup.v1.Challenge
+	(*GetGlobalConfigRequest)(nil),        // 2: backup.v1.GetGlobalConfigRequest
+	(*GlobalConfig)(nil),                  // 3: backup.v1.GlobalConfig
+	(*GlobalRule)(nil),                    // 4: backup.v1.GlobalRule
+	(*UserPolicy)(nil),                    // 5: backup.v1.UserPolicy
+	(*UserOverride)(nil),                  // 6: backup.v1.UserOverride
+	(*BackupBatch)(nil),                   // 7: backup.v1.BackupBatch
+	(*FileEntry)(nil),                     // 8: backup.v1.FileEntry
+	(*BatchAck)(nil),                      // 9: backup.v1.BatchAck
+	(*GetQuotaUsageRequest)(nil),          // 10: backup.v1.GetQuotaUsageRequest
+	(*QuotaUsage)(nil),                    // 11: backup.v1.QuotaUsage
+	(*PullRestoreRequest)(nil),            // 12: backup.v1.PullRestoreRequest
+	(*RestoreBatch)(nil),                  // 13: backup.v1.RestoreBatch
+	(*RegisterDelegationKeyRequest)(nil),  // 14: backup.v1.RegisterDelegationKeyRequest
+	(*RegisterDelegationKeyResponse)(nil), // 15: backup.v1.RegisterDelegationKeyResponse
+	(*RemoveDelegationKeyRequest)(nil),    // 16: backup.v1.RemoveDelegationKeyRequest
+	(*RemoveDelegationKeyResponse)(nil),   // 17: backup.v1.RemoveDelegationKeyResponse
+	(*RegisterTaskGrantRequest)(nil),      // 18: backup.v1.RegisterTaskGrantRequest
+	(*RegisterTaskGrantResponse)(nil),     // 19: backup.v1.RegisterTaskGrantResponse
+	nil,                                   // 20: backup.v1.UserPolicy.PerUserOverridesEntry
 }
 var file_pkg_backuppb_v1_backup_proto_depIdxs = []int32{
 	4,  // 0: backup.v1.GlobalConfig.global_rules:type_name -> backup.v1.GlobalRule
 	5,  // 1: backup.v1.GlobalConfig.user_policy:type_name -> backup.v1.UserPolicy
-	14, // 2: backup.v1.UserPolicy.per_user_overrides:type_name -> backup.v1.UserPolicy.PerUserOverridesEntry
+	20, // 2: backup.v1.UserPolicy.per_user_overrides:type_name -> backup.v1.UserPolicy.PerUserOverridesEntry
 	8,  // 3: backup.v1.BackupBatch.files:type_name -> backup.v1.FileEntry
 	8,  // 4: backup.v1.RestoreBatch.files:type_name -> backup.v1.FileEntry
 	6,  // 5: backup.v1.UserPolicy.PerUserOverridesEntry.value:type_name -> backup.v1.UserOverride
@@ -983,13 +1387,19 @@ var file_pkg_backuppb_v1_backup_proto_depIdxs = []int32{
 	7,  // 8: backup.v1.BackupService.PushBackup:input_type -> backup.v1.BackupBatch
 	10, // 9: backup.v1.BackupService.GetQuotaUsage:input_type -> backup.v1.GetQuotaUsageRequest
 	12, // 10: backup.v1.BackupService.PullRestore:input_type -> backup.v1.PullRestoreRequest
-	1,  // 11: backup.v1.BackupService.GetChallenge:output_type -> backup.v1.Challenge
-	3,  // 12: backup.v1.BackupService.GetGlobalConfig:output_type -> backup.v1.GlobalConfig
-	9,  // 13: backup.v1.BackupService.PushBackup:output_type -> backup.v1.BatchAck
-	11, // 14: backup.v1.BackupService.GetQuotaUsage:output_type -> backup.v1.QuotaUsage
-	13, // 15: backup.v1.BackupService.PullRestore:output_type -> backup.v1.RestoreBatch
-	11, // [11:16] is the sub-list for method output_type
-	6,  // [6:11] is the sub-list for method input_type
+	14, // 11: backup.v1.BackupService.RegisterDelegationKey:input_type -> backup.v1.RegisterDelegationKeyRequest
+	16, // 12: backup.v1.BackupService.RemoveDelegationKey:input_type -> backup.v1.RemoveDelegationKeyRequest
+	18, // 13: backup.v1.BackupService.RegisterTaskGrant:input_type -> backup.v1.RegisterTaskGrantRequest
+	1,  // 14: backup.v1.BackupService.GetChallenge:output_type -> backup.v1.Challenge
+	3,  // 15: backup.v1.BackupService.GetGlobalConfig:output_type -> backup.v1.GlobalConfig
+	9,  // 16: backup.v1.BackupService.PushBackup:output_type -> backup.v1.BatchAck
+	11, // 17: backup.v1.BackupService.GetQuotaUsage:output_type -> backup.v1.QuotaUsage
+	13, // 18: backup.v1.BackupService.PullRestore:output_type -> backup.v1.RestoreBatch
+	15, // 19: backup.v1.BackupService.RegisterDelegationKey:output_type -> backup.v1.RegisterDelegationKeyResponse
+	17, // 20: backup.v1.BackupService.RemoveDelegationKey:output_type -> backup.v1.RemoveDelegationKeyResponse
+	19, // 21: backup.v1.BackupService.RegisterTaskGrant:output_type -> backup.v1.RegisterTaskGrantResponse
+	14, // [14:22] is the sub-list for method output_type
+	6,  // [6:14] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name
@@ -1006,7 +1416,7 @@ func file_pkg_backuppb_v1_backup_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_backuppb_v1_backup_proto_rawDesc), len(file_pkg_backuppb_v1_backup_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

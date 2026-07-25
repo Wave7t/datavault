@@ -2,18 +2,18 @@ package svc
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"github.com/example/datavault/internal/server/middleware"
+	"github.com/example/datavault/pkg/auth"
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 	"github.com/example/datavault/pkg/store"
 	"github.com/example/datavault/pkg/zfs"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 )
 
 const restoreChunkContentBytes = 4 * 1024 * 1024
@@ -96,30 +96,22 @@ func (s *BackupServer) verifyPullRestoreSignature(hostname string, req *backuppb
 		return status.Error(codes.Unauthenticated, "missing restore signature")
 	}
 
-	pubKey, err := middleware.LoadAuthorizedKey(s.KeysDir, hostname, req.Username)
+	keys, err := middleware.LoadSigningKeys(s.KeysDir, hostname, req.Username, time.Now())
 	if err != nil {
 		return status.Errorf(codes.Unauthenticated, "no authorized key for %s/%s: %v", hostname, req.Username, err)
 	}
 
-	requestForHash := proto.Clone(req).(*backuppbv1.PullRestoreRequest)
-	requestForHash.Signature = nil
-	requestForHash.Nonce = nil
-
-	data, err := proto.Marshal(requestForHash)
+	payload, err := auth.ServerRequestPayload("PullRestore", req.Nonce, req)
 	if err != nil {
-		return status.Errorf(codes.Internal, "marshal restore request: %v", err)
+		return status.Errorf(codes.Internal, "build restore payload: %v", err)
 	}
-	hash := sha256.Sum256(data)
-
-	payload := append(req.Nonce, []byte("PullRestore")...)
-	payload = append(payload, hash[:]...)
 
 	var sig ssh.Signature
 	if err := ssh.Unmarshal(req.Signature, &sig); err != nil {
 		return status.Error(codes.Unauthenticated, "invalid signature format")
 	}
-	if err := pubKey.Verify(payload, &sig); err != nil {
-		return status.Errorf(codes.Unauthenticated, "signature verification failed: %v", err)
+	if !middleware.VerifyAnyKey(keys, payload, &sig) {
+		return status.Error(codes.Unauthenticated, "signature verification failed")
 	}
 	return nil
 }

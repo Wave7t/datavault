@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/example/datavault/internal/server/middleware"
 	"github.com/example/datavault/internal/server/receiver"
@@ -236,14 +237,10 @@ func (s *BackupServer) verifyBatchSignature(hostname string, batch *backuppbv1.B
 		return status.Error(codes.Unauthenticated, "missing batch signature")
 	}
 
-	pubKey, err := middleware.LoadAuthorizedKey(s.KeysDir, hostname, batch.Username)
-	if err != nil {
-		return status.Errorf(codes.Unauthenticated, "no authorized key for %s/%s: %v", hostname, batch.Username, err)
-	}
-
 	batchForHash := proto.Clone(batch).(*backuppbv1.BackupBatch)
 	batchForHash.Signature = nil
 	batchForHash.Nonce = nil
+	batchForHash.SignerPubkey = nil
 
 	payload := append(batch.Nonce, []byte("PushBackup")...)
 	batchHash := sha256.Sum256(mustMarshal(batchForHash))
@@ -253,7 +250,38 @@ func (s *BackupServer) verifyBatchSignature(hostname string, batch *backuppbv1.B
 	if err := ssh.Unmarshal(batch.Signature, &sig); err != nil {
 		return status.Error(codes.Unauthenticated, "invalid signature format")
 	}
-	if err := pubKey.Verify(payload, &sig); err != nil {
+
+	if len(batch.SignerPubkey) != 0 {
+		return s.verifyTaskKeySignature(hostname, batch, &sig, payload)
+	}
+
+	keys, err := middleware.LoadSigningKeys(s.KeysDir, hostname, batch.Username, time.Now())
+	if err != nil {
+		return status.Errorf(codes.Unauthenticated, "no authorized key for %s/%s: %v", hostname, batch.Username, err)
+	}
+	if !middleware.VerifyAnyKey(keys, payload, &sig) {
+		return status.Error(codes.Unauthenticated, "signature verification failed")
+	}
+	return nil
+}
+
+// verifyTaskKeySignature verifies a batch signed by an ephemeral task key.
+// The key must have a live grant for this host/user with method PushBackup;
+// there is deliberately no fallback to the user's registered keys.
+func (s *BackupServer) verifyTaskKeySignature(hostname string, batch *backuppbv1.BackupBatch, sig *ssh.Signature, payload []byte) error {
+	pubKey, err := ssh.ParsePublicKey(batch.SignerPubkey)
+	if err != nil {
+		return status.Error(codes.Unauthenticated, "invalid signer public key")
+	}
+	fp := middleware.DelegationFingerprint(pubKey)
+	grant, err := store.GetTaskGrant(s.DB, hostname, batch.Username, fp, time.Now())
+	if err != nil {
+		return status.Errorf(codes.Internal, "lookup task grant: %v", err)
+	}
+	if grant == nil || grant.Method != "PushBackup" {
+		return status.Error(codes.Unauthenticated, "no task grant for signer key")
+	}
+	if err := pubKey.Verify(payload, sig); err != nil {
 		return status.Errorf(codes.Unauthenticated, "signature verification failed: %v", err)
 	}
 	return nil

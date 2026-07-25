@@ -20,6 +20,9 @@ service AgentService {
   rpc GetAuthChallenge(GetAuthChallengeRequest) returns (AuthChallenge);
   rpc GetQuotaUsage(GetQuotaUsageRequest) returns (QuotaUsage);
   rpc RequestRestore(RequestRestoreRequest) returns (RequestRestoreResponse);
+  rpc EnrollWebDelegation(EnrollWebDelegationRequest) returns (EnrollWebDelegationResponse);
+  rpc RevokeWebDelegation(RevokeWebDelegationRequest) returns (RevokeWebDelegationResponse);
+  rpc ListWebDelegations(ListWebDelegationsRequest) returns (ListWebDelegationsResponse);
 }
 
 message Rule {
@@ -134,4 +137,35 @@ message RequestRestoreRequest {
 }
 message RequestRestoreResponse {
   string task_id = 1;
+}
+
+message EnrollWebDelegationRequest {
+  string gateway_cn = 1;
+  string delegation_pubkey = 2; // authorized_keys format
+  int64 ttl_seconds = 3; // <= https_api.delegation_ttl
+  string server = 4; // from GetAuthChallenge; empty = default
+  bytes nonce = 5;
+  bytes signature = 6; // user primary key over DelegationConsentPayload
+}
+message EnrollWebDelegationResponse {
+  int64 expires_at = 1;
+}
+
+message RevokeWebDelegationRequest {
+  string gateway_cn = 1;
+  string server = 2;
+  bytes nonce = 3;
+  bytes signature = 4; // user primary key over DelegationRemovalPayload
+}
+message RevokeWebDelegationResponse {}
+
+message ListWebDelegationsRequest {}
+message ListWebDelegationsResponse {
+  repeated WebDelegation delegations = 1;
+}
+message WebDelegation {
+  string gateway_cn = 1;
+  string delegation_pubkey = 2;
+  int64 expires_at = 3;
+  bool revoked = 4;
 }

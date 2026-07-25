@@ -67,6 +67,9 @@ func runServer() {
 	if err := store.MigrateNonces(db); err != nil {
 		log.Fatalf("migrate nonces: %v", err)
 	}
+	if err := store.MigrateTaskGrants(db); err != nil {
+		log.Fatalf("migrate task_grants: %v", err)
+	}
 
 	// ZFS manager for dataset and snapshot operations
 	zfsMgr, err := zfs.New(cfg.Server.BackupPool)

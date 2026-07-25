@@ -51,6 +51,7 @@ dvault CLI                 Agent (root service)               Server (root servi
 | --- | --- | --- |
 | Unix user | Manage rules below their home, trigger user backup, inspect quota, restore below their home | Select another Unix user, source outside their home, restore outside their home, manage ZFS policy |
 | Agent host | Send configured machine backups using its mTLS identity | Impersonate a different enrolled Agent without its certificate/private key |
+| Web gateway | Act, for a user who enrolled it, on that user's rules, syncs, quota, and restores until the delegation expires or is revoked | Act for a user who never enrolled it, reach machine rules, create its own delegation, address a UID below `min_uid` |
 | Backup operator | Configure hosts, storage, quotas, retention, machine rules, and enrollment policy | Use a user backup RPC to delete historical recovery snapshots |
 | Server | Enforce registered host/user identities and write backup data | Treat a caller-supplied username as proof of a local Unix identity |
 
@@ -106,6 +107,97 @@ another Agent, nor as another user on the same Agent. User-facing backup,
 quota, and restore RPCs require this signature; administrative configuration
 and machine-rule work instead rely on the authenticated Agent and operator
 configuration.
+
+### Web gateway delegations
+
+When the optional HTTPS API is enabled (see the [deployment guide](deployment.md#web-gateway-integration-optional)),
+an Agent accepts requests from a web backend ("gateway") over a second listener.
+The gateway can never authenticate itself as a user on its own. Every request
+climbs a four-link trust chain, and each link distrusts the one above it:
+
+1. **mTLS + CN allowlist.** The gateway presents a private-CA client certificate
+   whose CN is in `https_api.gateway_cns`. A valid certificate whose CN is not
+   listed — including another Agent's cert — is rejected with `401`.
+2. **Local delegation record.** The Agent's `web_delegations` table must hold an
+   unexpired, unrevoked `({user}, gateway CN)` row, else `403`. The gateway
+   cannot create this row.
+3. **Delegation-key signature.** For sync, quota, and restore the gateway signs
+   `{method, username, nonce, payload_hash}` with its per-user delegation key.
+   The Agent verifies it locally against the enrolled `delegation_pubkey`, then
+   forwards nonce and signature to the Server, which re-verifies through the
+   existing path. The Server's registered key remains the final arbiter even if
+   the Agent's local store is tampered with.
+4. **svc-layer checks.** Home-directory boundaries, symlink rejection, and
+   rule-name legality apply identically to the CLI path.
+
+The gateway cannot reach machine rules, cannot act for a user who never
+enrolled it, and cannot address a UID below `min_uid` (default 1000).
+
+**Enrollment ceremony.** A delegation is created only by the user, on the Agent
+host, signing live with her SSH agent. The gateway never touches the user's
+private key. The gateway first generates an Ed25519 delegation key pair per
+served user and shows the public key (e.g. in the web UI). The user then runs,
+on the Agent host with a live `SSH_AUTH_SOCK`:
+
+```bash
+dvault web enroll --gateway backup-web-01 \
+  --delegation-key 'ssh-ed25519 AAAA... gateway-delegation:alice' \
+  --ttl 720h
+```
+
+The CLI's signed payload covers method, username, gateway CN, delegation public
+key, TTL, and nonce, so neither key nor CN can be swapped in flight. The Agent
+then performs two writes that must both succeed: a local `web_delegations` row
+and, over its existing mTLS identity, a Server-side registration of the
+delegation public key scoped to `<agent-cn>/<user>.delegations/` with the
+gateway CN and expiry recorded as metadata. The enroll signature is also
+forwarded to the Server, which verifies it against the user's existing primary
+key — the Server holds cryptographic proof of user consent and the Agent cannot
+fabricate a delegation on its own.
+
+**New trust assumption.** Once a delegation is enrolled, *an unlocked gateway
+delegation key plus the gateway client certificate is signing authority for that
+user's backup operations until expiry or revocation.* Operators must treat a
+gateway host compromise the same way they treat an Agent compromise for the
+affected users, and the gateway's delegation private keys need the same custody
+as Agent private keys (see the [deployment guide](deployment.md#web-gateway-integration-optional)).
+
+**Ephemeral task keys.** `PushBackup` signs every streamed batch, so the gateway
+cannot stay in the signature loop for the life of a sync. Sync therefore uses a
+short-lived delegation chain: the Agent generates an ephemeral Ed25519 task key
+in memory, asks the gateway to sign a `RegisterTaskGrant` payload with the
+delegation key, and calls a new Server RPC `RegisterTaskGrant` over its mTLS
+identity. The Server consumes the nonce, verifies the delegation signature
+against the enrolled key, and records a grant bound to `(agent CN, username,
+method, ephemeral key fingerprint)`. The ephemeral private key never leaves
+Agent memory and is discarded when the task ends. The grant lives for **6
+hours** and is valid only for that one host/user/method; a stolen ephemeral key
+is useless after expiry and cannot authorise anything else. Server batch
+verification accepts a batch signed by either the user's primary key, an
+unexpired delegation key, or an ephemeral key with a live grant.
+
+**Revocation.** Any of the following takes effect independently:
+
+- The user runs `dvault web revoke --gateway backup-web-01` (same signature
+  requirements as enroll), or asks the gateway to call
+  `DELETE /v1/users/{user}/delegation` on her behalf.
+- The delegation's `expires_at` is reached (enforced at request time and again
+  in Server metadata checks; the default TTL is `720h`).
+- An operator deletes the Server-side delegation key and the local record as an
+  incident-response action.
+
+Local revocation takes effect immediately even if the Server-side removal call
+fails; the Agent retries it in the background with a warning log. In-flight
+tasks are unaffected, but new requests get `403`.
+
+**Incident response for a gateway compromise.** If a gateway host or its
+delegation keys are suspected compromised, treat it like an Agent compromise for
+every user who enrolled that gateway: remove the gateway CN from
+`https_api.gateway_cns` (the listener immediately rejects its cert), revoke or
+reissue its client certificate at the CA, revoke every delegation bound to that
+CN, and review the backups made under those delegations during the suspect
+window. Because delegation keys are bound to the gateway CN, removing that CN
+neutralises every delegation the gateway held regardless of expiry.
 
 ### Machine rules
 

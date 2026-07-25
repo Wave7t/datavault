@@ -32,18 +32,27 @@ const (
 // MethodWhitelist contains RPC methods that skip SSH signature verification.
 // These are the initial handshake endpoints used before authentication is established.
 var MethodWhitelist = map[string]bool{
-	"/grpc.health.v1.Health/Check":             true,
-	"/backup.v1.BackupService/GetChallenge":    true,
-	"/backup.v1.BackupService/GetGlobalConfig": true,
-	"/backup.v1.BackupService/PushBackup":      true,
-	"/backup.v1.BackupService/GetQuotaUsage":   true,
-	"/backup.v1.BackupService/PullRestore":     true,
+	"/grpc.health.v1.Health/Check":                   true,
+	"/backup.v1.BackupService/GetChallenge":          true,
+	"/backup.v1.BackupService/GetGlobalConfig":       true,
+	"/backup.v1.BackupService/PushBackup":            true,
+	"/backup.v1.BackupService/GetQuotaUsage":         true,
+	"/backup.v1.BackupService/PullRestore":           true,
+	"/backup.v1.BackupService/RegisterDelegationKey": true,
+	"/backup.v1.BackupService/RemoveDelegationKey":   true,
+	"/backup.v1.BackupService/RegisterTaskGrant":     true,
 }
 
 // HostnameFromContext extracts the hostname set by the auth interceptor.
 func HostnameFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(ctxHostname).(string)
 	return v
+}
+
+// ContextWithHostname returns a context with the hostname value set.
+// Used by tests to simulate the auth interceptor.
+func ContextWithHostname(ctx context.Context, hostname string) context.Context {
+	return context.WithValue(ctx, ctxHostname, hostname)
 }
 
 // UsernameFromContext extracts the username set by the auth interceptor.

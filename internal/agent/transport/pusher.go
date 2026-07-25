@@ -33,6 +33,10 @@ type PushConfig struct {
 	// It is stripped again when reading source file contents locally.
 	PathPrefix string
 	SignFunc   func([]byte) ([]byte, *ssh.Signature, error)
+	// SignerPubKey, when non-nil, is attached to every signed batch as
+	// signer_pubkey so the Server can look up the task grant for an
+	// ephemeral task key. Nil keeps the existing registered-key behavior.
+	SignerPubKey []byte
 	// BandwidthLimitBytesPerSecond limits upload payloads for this attempt.
 	// Zero leaves transfers unlimited.
 	BandwidthLimitBytesPerSecond int64
@@ -182,7 +186,7 @@ func sendChunkedFile(
 			}},
 		}
 		if cfg.RuleType == "user" {
-			if err := signBatch(pb, nonce, cfg.SignFunc); err != nil {
+			if err := signBatch(pb, nonce, cfg.SignFunc, cfg.SignerPubKey); err != nil {
 				return fmt.Errorf("sign: %w", err)
 			}
 		}
@@ -244,7 +248,7 @@ func sendBatch(
 	}
 
 	if cfg.RuleType == "user" {
-		if err := signBatch(pb, nonce, cfg.SignFunc); err != nil {
+		if err := signBatch(pb, nonce, cfg.SignFunc, cfg.SignerPubKey); err != nil {
 			return fmt.Errorf("sign: %w", err)
 		}
 	}
@@ -300,7 +304,7 @@ func sourcePath(prefix, archivePath string) (string, error) {
 	return strings.TrimPrefix(cleanPath, cleanPrefix+string(filepath.Separator)), nil
 }
 
-func signBatch(pb *backuppbv1.BackupBatch, nonce []byte, signFunc func([]byte) ([]byte, *ssh.Signature, error)) error {
+func signBatch(pb *backuppbv1.BackupBatch, nonce []byte, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte) error {
 	data, err := proto.Marshal(pb)
 	if err != nil {
 		return fmt.Errorf("marshal batch for hash: %w", err)
@@ -323,6 +327,9 @@ func signBatch(pb *backuppbv1.BackupBatch, nonce []byte, signFunc func([]byte) (
 
 	pb.Signature = ssh.Marshal(sig)
 	pb.Nonce = nonce
+	if signerPubKey != nil {
+		pb.SignerPubkey = signerPubKey
+	}
 	return nil
 }
 
