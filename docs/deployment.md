@@ -327,6 +327,148 @@ deliberate, firewall-restricted design. Ensure every Agent `servers.address`
 host or `tls_server_name` is present as a DNS or IP SAN in the server
 certificate.
 
+## Web gateway integration (optional)
+
+The Agent can expose an optional HTTPS API so a web backend ("gateway") can
+integrate datavault into a web UI on behalf of enrolled users. The feature is
+disabled unless an `https_api` block is present in the Agent configuration; an
+Agent without it behaves byte-for-byte as today.
+
+Enable it only when a trusted web backend must drive user backup, quota, and
+restore flows remotely. The gateway is a new trust principal: once a user
+enrolls it, the gateway's certificate plus an unlocked delegation key are
+signing authority for that user's backup operations until expiry or revocation
+(see [Security model: web gateway delegations](security-model.md#web-gateway-delegations)).
+Do not enable it for Agents whose only callers are local users.
+
+### Configuration
+
+Add the `https_api` section to `/etc/datavault/agent/config.yaml`:
+
+```yaml
+https_api:
+  listen: "10.0.0.5:8443"
+  cert_file: /etc/datavault/agent/https.crt
+  key_file:  /etc/datavault/agent/https.key
+  ca_file:   /etc/datavault/agent/ca.crt
+  gateway_cns: ["backup-web-01"]
+  delegation_ttl: 720h   # default max delegation lifetime; enroll may shorten
+  min_uid: 1000          # accounts below this cannot be delegated or addressed
+```
+
+Field notes:
+
+- `listen` — the HTTPS listener address. Bind a private interface and restrict
+  it to gateway subnets with the host firewall (see below); do not expose it on
+  a public interface.
+- `cert_file` / `key_file` — the listener's server certificate and private key,
+  issued by the same private CA as Agent↔Server mTLS (no public CA). The CN is
+  the Agent host name and is presented to the gateway.
+- `ca_file` — the private CA certificate used to verify gateway client
+  certificates. Reuse the Agent's existing `ca_file`; there is no system root
+  fallback.
+- `gateway_cns` — allowlist of gateway client-certificate CNs. A CA-issued
+  certificate whose CN is not listed is rejected, so another Agent's cert cannot
+  masquerade as a gateway. At least one CN is required.
+- `delegation_ttl` — default maximum delegation lifetime applied at enroll time
+  (an enroll may request a shorter TTL). Defaults to `720h`. Must be positive.
+- `min_uid` — Unix-uid floor for any user the API may address or for whom a
+  delegation may be enrolled; root and system accounts are rejected. Defaults to
+  `1000`. Must not be negative.
+
+The listener uses TLS 1.3 with `RequireAndVerifyClientCert`; there is no
+anonymous or password fallback. Removing a CN from `gateway_cns` and reloading
+the Agent immediately rejects that gateway's certificate.
+
+### Certificate issuance
+
+Issue a server certificate for the listener and a client certificate per
+gateway, reusing the same private CA and the `dvault cert` workflow described in
+the [Certificate lifecycle](#certificate-lifecycle) section below:
+
+```bash
+# HTTPS listener server certificate (CN = Agent host name).
+sudo dvault cert issue --server \
+  --ca-cert /etc/datavault/pki/ca.crt \
+  --ca-key  /etc/datavault/pki/ca.key \
+  --cert /etc/datavault/agent/https.crt \
+  --key  /etc/datavault/agent/https.key \
+  --common-name agent-01 --dns agent-01.example.com
+
+# Gateway client certificate (CN = gateway identity, listed in gateway_cns).
+sudo dvault cert issue --client \
+  --ca-cert /etc/datavault/pki/ca.crt \
+  --ca-key  /etc/datavault/pki/ca.key \
+  --cert /etc/datavault/gateway/backup-web-01.crt \
+  --key  /etc/datavault/gateway/backup-web-01.key \
+  --common-name backup-web-01
+```
+
+Private keys are written with mode `0600`, certificates with mode `0644`.
+Install the gateway's cert, key, and a copy of the CA certificate on the
+gateway host through your secret-management process. Rotate certificates by
+installing new files and restarting the affected services during a controlled
+maintenance window.
+
+### Gateway onboarding runbook
+
+For each user the gateway will serve:
+
+1. On the gateway, generate a per-user Ed25519 delegation key pair in
+   SSH-compatible format and keep the private key under access control (see
+   custody requirements below). Per-user keys give finer revocation than one
+   shared gateway key and are the documented default.
+2. Display the public key — an `authorized_keys`-format line such as
+   `ssh-ed25519 AAAA... gateway-delegation:alice` — to the user, e.g. in the
+   web UI. The gateway must never send the private key anywhere.
+3. The user runs, on the Agent host with a live `SSH_AUTH_SOCK`:
+
+   ```bash
+   dvault web enroll --gateway backup-web-01 \
+     --delegation-key 'ssh-ed25519 AAAA... gateway-delegation:alice' \
+     --ttl 720h
+   ```
+
+   The `--delegation-key` flag accepts the key line directly or `@file` to read
+   it from a file. The CLI signs with the user's SSH agent over the method,
+   username, gateway CN, delegation public key, TTL, and a fresh nonce, so the
+   key and CN cannot be swapped in flight.
+
+4. Verify the enrollment succeeded with `dvault web list`, or by having the
+   gateway read `GET /v1/users/alice/delegation`.
+
+The user can later self-revoke with `dvault web revoke --gateway backup-web-01`,
+or by asking the gateway to call `DELETE /v1/users/alice/delegation` on her
+behalf. An operator can also remove the Server-side delegation key and the
+local `web_delegations` row as an incident-response action.
+
+### Firewall guidance
+
+Bind `https_api.listen` to a private interface and restrict ingress to the
+gateway subnet only, mirroring the Server's private-network policy. The HTTPS
+API has no rate-limit bypass and no anonymous paths, but it is still an
+authentication surface: do not place it on a public interface. If the gateway
+and Agent share a VLAN or VPN, prefer that addressing.
+
+### Delegation private-key custody
+
+Each delegation private key is root-equivalent for the enrolled user's backup
+authority until expiry or revocation: paired with the gateway client
+certificate, it can trigger syncs, request restores, and read quota for that
+user. Treat it with the same care as Agent private keys and user SSH private
+keys:
+
+- Store it on the gateway host with `0600` permissions, owned by the gateway
+  service account, on encrypted storage where available.
+- Do not commit it to source control, bake it into container images, or send it
+  to the Agent — the gateway signs locally and only the public key ever leaves.
+- Rotate delegation keys on the same cadence as gateway certificates, and after
+  any personnel or host change with access to the gateway key store; rotation is
+  a fresh `dvault web enroll` plus revocation of the previous delegation.
+- Treat loss or suspected exposure of a delegation key as a compromise of that
+  user's backup authority: revoke the delegation and review backups made under
+  it.
+
 ## Certificate lifecycle
 
 `dvault cert init-ca` creates a private CA. `dvault cert issue --server` needs
