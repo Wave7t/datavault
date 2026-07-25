@@ -6,7 +6,10 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
+	"time"
 
 	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"github.com/example/datavault/pkg/auth"
@@ -59,6 +62,7 @@ func main() {
 	rootCmd.AddCommand(restoreCmd())
 	rootCmd.AddCommand(adminCmd())
 	rootCmd.AddCommand(certCmd())
+	rootCmd.AddCommand(webCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -457,4 +461,149 @@ func certCmd() *cobra.Command {
 
 	cmd.AddCommand(initCA, issue)
 	return cmd
+}
+
+func webCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "web", Short: "Manage web gateway delegations"}
+
+	var gateway, delegationKey, server string
+	var ttl time.Duration
+	enroll := &cobra.Command{
+		Use:   "enroll",
+		Short: "Authorize a web gateway to act for you until the TTL expires",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			keyLine, err := resolveDelegationKeyInput(delegationKey)
+			if err != nil {
+				return err
+			}
+			me, err := user.Current()
+			if err != nil {
+				return fmt.Errorf("resolve current user: %w", err)
+			}
+			challenge, err := client.GetAuthChallenge(context.Background(), &agentpbv1.GetAuthChallengeRequest{Method: "RegisterDelegationKey"})
+			if err != nil {
+				return fmt.Errorf("get auth challenge: %w", err)
+			}
+			if server == "" {
+				server = challenge.Server
+			}
+			expiresAt := time.Now().Add(ttl).Unix()
+			payload := auth.DelegationConsentPayload(challenge.Nonce, me.Username, gateway, keyLine, expiresAt)
+			_, sig, err := auth.SignWithSSHAgent(payload)
+			if err != nil {
+				return fmt.Errorf("sign consent: %w", err)
+			}
+			resp, err := client.EnrollWebDelegation(context.Background(), &agentpbv1.EnrollWebDelegationRequest{
+				GatewayCn:        gateway,
+				DelegationPubkey: keyLine,
+				TtlSeconds:       int64(ttl / time.Second),
+				Server:           server,
+				Nonce:            challenge.Nonce,
+				Signature:        ssh.Marshal(sig),
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Delegation for gateway %q recorded, expires %s\n", gateway, time.Unix(resp.ExpiresAt, 0).Format(time.RFC3339))
+			return nil
+		},
+	}
+	enroll.Flags().StringVar(&gateway, "gateway", "", "gateway certificate CN (required)")
+	enroll.Flags().StringVar(&delegationKey, "delegation-key", "", "gateway delegation public key (authorized_keys line or @file)")
+	enroll.Flags().DurationVar(&ttl, "ttl", 720*time.Hour, "delegation lifetime")
+	enroll.Flags().StringVar(&server, "server", "", "backup server address (default: from challenge)")
+	_ = enroll.MarkFlagRequired("gateway")
+	_ = enroll.MarkFlagRequired("delegation-key")
+	cmd.AddCommand(enroll)
+
+	revoke := &cobra.Command{
+		Use:   "revoke",
+		Short: "Revoke a gateway delegation",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			me, err := user.Current()
+			if err != nil {
+				return fmt.Errorf("resolve current user: %w", err)
+			}
+			// Look up the delegation pubkey so the removal statement binds it.
+			list, err := client.ListWebDelegations(context.Background(), &agentpbv1.ListWebDelegationsRequest{})
+			if err != nil {
+				return err
+			}
+			var keyLine string
+			for _, d := range list.Delegations {
+				if d.GatewayCn == gateway && !d.Revoked {
+					keyLine = d.DelegationPubkey
+				}
+			}
+			if keyLine == "" {
+				return fmt.Errorf("no active delegation for gateway %q", gateway)
+			}
+			challenge, err := client.GetAuthChallenge(context.Background(), &agentpbv1.GetAuthChallengeRequest{Method: "RemoveDelegationKey"})
+			if err != nil {
+				return fmt.Errorf("get auth challenge: %w", err)
+			}
+			payload := auth.DelegationRemovalPayload(challenge.Nonce, me.Username, gateway, keyLine)
+			_, sig, err := auth.SignWithSSHAgent(payload)
+			if err != nil {
+				return fmt.Errorf("sign removal: %w", err)
+			}
+			_, err = client.RevokeWebDelegation(context.Background(), &agentpbv1.RevokeWebDelegationRequest{
+				GatewayCn: gateway,
+				Server:    challenge.Server,
+				Nonce:     challenge.Nonce,
+				Signature: ssh.Marshal(sig),
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Delegation for gateway %q revoked\n", gateway)
+			return nil
+		},
+	}
+	revoke.Flags().StringVar(&gateway, "gateway", "", "gateway certificate CN (required)")
+	_ = revoke.MarkFlagRequired("gateway")
+	cmd.AddCommand(revoke)
+
+	cmd.AddCommand(&cobra.Command{
+		Use:   "list",
+		Short: "List your web delegations",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resp, err := client.ListWebDelegations(context.Background(), &agentpbv1.ListWebDelegationsRequest{})
+			if err != nil {
+				return err
+			}
+			for _, d := range resp.Delegations {
+				state := "active"
+				if d.Revoked {
+					state = "revoked"
+				} else if time.Now().Unix() > d.ExpiresAt {
+					state = "expired"
+				}
+				fmt.Printf("  %-20s [%s] expires=%s\n", d.GatewayCn, state, time.Unix(d.ExpiresAt, 0).Format(time.RFC3339))
+			}
+			return nil
+		},
+	})
+	return cmd
+}
+
+// resolveDelegationKeyInput accepts an authorized_keys line directly or
+// "@/path/to/key.pub" to read it from a file.
+func resolveDelegationKeyInput(input string) (string, error) {
+	if input == "" {
+		return "", fmt.Errorf("delegation key is required")
+	}
+	line := input
+	if rest, ok := strings.CutPrefix(input, "@"); ok {
+		data, err := os.ReadFile(filepath.Clean(rest))
+		if err != nil {
+			return "", fmt.Errorf("read delegation key file: %w", err)
+		}
+		line = string(data)
+	}
+	line = strings.TrimSpace(line)
+	if _, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line)); err != nil {
+		return "", fmt.Errorf("invalid delegation public key: %w", err)
+	}
+	return line, nil
 }
