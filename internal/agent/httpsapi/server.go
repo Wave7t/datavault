@@ -46,6 +46,7 @@ type Server struct {
 	httpSrv        *http.Server
 	gatewayLimiter *rateLimiter
 	userLimiter    *rateLimiter
+	ephemeral      *ephemeralKeys
 }
 
 func NewServer(deps Deps) (*Server, error) {
@@ -60,6 +61,7 @@ func NewServer(deps Deps) (*Server, error) {
 		mux:            http.NewServeMux(),
 		gatewayLimiter: newRateLimiter(100, 200),
 		userLimiter:    newRateLimiter(10.0/60.0, 10), // 10 write ops per minute per user
+		ephemeral:      newEphemeralKeys(),
 	}
 	s.routes()
 	return s, nil
@@ -110,6 +112,3 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 	return s.httpSrv.Shutdown(ctx)
 }
-
-// routes wires the HTTP handlers. Task 12 replaces this stub.
-func (s *Server) routes() {}
