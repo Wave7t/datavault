@@ -110,3 +110,14 @@ func (p *ConnPool) Close() {
 	p.conns = nil
 	p.clients = nil
 }
+
+// SetClientForTest injects a fake client for the given cache key.
+// It is intended for unit tests only.
+func (p *ConnPool) SetClientForTest(cacheKey string, client backuppbv1.BackupServiceClient) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.clients == nil {
+		p.clients = make(map[string]backuppbv1.BackupServiceClient)
+	}
+	p.clients[cacheKey] = client
+}

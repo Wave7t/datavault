@@ -50,6 +50,7 @@ type Orchestrator struct {
 }
 
 var lookupUserHome = userHomeDir
+var userLookup = user.Lookup
 
 const machineUsername = "_machine"
 
@@ -116,17 +117,34 @@ func generateTaskID(prefix, username string) (string, error) {
 // An optional ruleName filter can restrict the sync to a single named rule;
 // pass an empty string to sync all rules.
 func (o *Orchestrator) RunSync(username, ruleName string) (string, error) {
-	return o.runSync(username, ruleName, nil)
+	return o.runSync(username, ruleName, nil, nil)
 }
 
 // RunSyncWithSigner runs a user sync using a caller-owned SSH-agent signer.
 // The signer is intentionally supplied by the Unix-socket service rather
 // than inherited from the root Agent environment.
 func (o *Orchestrator) RunSyncWithSigner(username, ruleName string, signFunc func([]byte) ([]byte, *ssh.Signature, error)) (string, error) {
-	return o.runSync(username, ruleName, signFunc)
+	return o.runSync(username, ruleName, signFunc, nil)
 }
 
-func (o *Orchestrator) runSync(username, ruleName string, signFunc func([]byte) ([]byte, *ssh.Signature, error)) (string, error) {
+// RunSyncWithTaskKey runs a user sync signed by an ephemeral task key that
+// has been authorized at the Server via a task grant (see
+// RegisterTaskGrant). The key never leaves process memory.
+func (o *Orchestrator) RunSyncWithTaskKey(username, ruleName string, taskKey ssh.Signer) (string, error) {
+	if taskKey == nil {
+		return "", fmt.Errorf("task key is required")
+	}
+	pub := taskKey.PublicKey().Marshal()
+	return o.runSync(username, ruleName, func(payload []byte) ([]byte, *ssh.Signature, error) {
+		sig, err := taskKey.Sign(rand.Reader, payload)
+		if err != nil {
+			return nil, nil, err
+		}
+		return pub, sig, nil
+	}, pub)
+}
+
+func (o *Orchestrator) runSync(username, ruleName string, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte) (string, error) {
 	if o == nil || o.Cfg == nil || len(o.Cfg.Servers) == 0 {
 		return "", fmt.Errorf("no backup servers configured")
 	}
@@ -160,7 +178,7 @@ func (o *Orchestrator) runSync(username, ruleName string, signFunc func([]byte) 
 			o.markFailed(taskID, username, "", tracker, fmt.Errorf("load user rules: %w", err))
 			return taskID, fmt.Errorf("load user rules: %w", err)
 		}
-		account, err := user.Lookup(username)
+		account, err := userLookup(username)
 		if err != nil {
 			o.markFailed(taskID, username, "", tracker, fmt.Errorf("lookup user home: %w", err))
 			return taskID, fmt.Errorf("lookup user home: %w", err)
@@ -180,7 +198,7 @@ func (o *Orchestrator) runSync(username, ruleName string, signFunc func([]byte) 
 		wg.Add(1)
 		go func(server config.ServerEntry) {
 			defer wg.Done()
-			o.syncToServerWithRetry(server, username, ruleName, userRules, tracker, taskID, signFunc)
+			o.syncToServerWithRetry(server, username, ruleName, userRules, tracker, taskID, signFunc, signerPubKey)
 		}(srv)
 	}
 
@@ -198,7 +216,7 @@ func (o *Orchestrator) runSync(username, ruleName string, signFunc func([]byte) 
 	return taskID, nil
 }
 
-func (o *Orchestrator) syncToServerWithRetry(server config.ServerEntry, username, ruleName string, userRules []rules.Rule, tracker *progress.Tracker, taskID string, signFunc func([]byte) ([]byte, *ssh.Signature, error)) {
+func (o *Orchestrator) syncToServerWithRetry(server config.ServerEntry, username, ruleName string, userRules []rules.Rule, tracker *progress.Tracker, taskID string, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte) {
 	backoff := retry.New(retry.Config{
 		Initial:    o.Cfg.Retry.InitialInterval,
 		Max:        o.Cfg.Retry.MaxInterval,
@@ -207,7 +225,7 @@ func (o *Orchestrator) syncToServerWithRetry(server config.ServerEntry, username
 		MaxElapsed: o.Cfg.Retry.MaxElapsedTime,
 	})
 	for {
-		err := o.syncToServer(server, username, ruleName, userRules, tracker, signFunc)
+		err := o.syncToServer(server, username, ruleName, userRules, tracker, signFunc, signerPubKey)
 		if err == nil {
 			return
 		}
@@ -227,7 +245,7 @@ func (o *Orchestrator) syncToServerWithRetry(server config.ServerEntry, username
 // syncToServer runs one complete sync attempt for a single server:
 // fetch global config -> merge rules -> scan paths -> compute diff -> push.
 // It returns a classified error so the caller can retry only transient faults.
-func (o *Orchestrator) syncToServer(server config.ServerEntry, username, ruleName string, userRules []rules.Rule, tracker *progress.Tracker, signFunc func([]byte) ([]byte, *ssh.Signature, error)) error {
+func (o *Orchestrator) syncToServer(server config.ServerEntry, username, ruleName string, userRules []rules.Rule, tracker *progress.Tracker, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte) error {
 	serverAddr := server.Address
 	client, err := o.Pool.GetClientWithServerName(serverAddr, server.TLSServerName)
 	if err != nil {
@@ -318,7 +336,7 @@ func (o *Orchestrator) syncToServer(server config.ServerEntry, username, ruleNam
 	// only after a root's transfer succeeds.
 	tracker.SetPhase(progress.PhaseTransferring)
 	for _, batch := range batches {
-		if err := o.pushDiffsToServer(client, serverAddr, username, ruleType, batch.rootPath, batch.rootPrefix, batch.diffs, tracker, signFunc); err != nil {
+		if err := o.pushDiffsToServer(client, serverAddr, username, ruleType, batch.rootPath, batch.rootPrefix, batch.diffs, tracker, signFunc, signerPubKey); err != nil {
 			return fmt.Errorf("push %q to %s: %w", batch.rootPath, serverAddr, err)
 		}
 
@@ -355,7 +373,7 @@ func (o *Orchestrator) updateSnapshots(serverAddr, username string, diffs []scan
 // pushDiffsToServer streams file diffs to the backup server via
 // BackupService.PushBackup. It reads file contents from disk and sends them
 // in batches. This is the core transfer step of the sync pipeline.
-func (o *Orchestrator) pushDiffsToServer(client backuppbv1.BackupServiceClient, serverAddr, username, ruleType, rootPath, rootPrefix string, diffs []scanner.FileDiff, tracker *progress.Tracker, signFunc func([]byte) ([]byte, *ssh.Signature, error)) error {
+func (o *Orchestrator) pushDiffsToServer(client backuppbv1.BackupServiceClient, serverAddr, username, ruleType, rootPath, rootPrefix string, diffs []scanner.FileDiff, tracker *progress.Tracker, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	return transport.PushBackup(ctx, transport.PushConfig{
@@ -367,6 +385,7 @@ func (o *Orchestrator) pushDiffsToServer(client backuppbv1.BackupServiceClient, 
 		RootPath:                     rootPath,
 		PathPrefix:                   rootPrefix,
 		SignFunc:                     signFunc,
+		SignerPubKey:                 signerPubKey,
 		BandwidthLimitBytesPerSecond: o.Cfg.BandwidthLimitBytesPerSecond,
 	}, diffs)
 }
