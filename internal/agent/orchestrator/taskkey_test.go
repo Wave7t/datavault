@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"path/filepath"
 	"os/user"
+	"path/filepath"
 	"testing"
 	"time"
 

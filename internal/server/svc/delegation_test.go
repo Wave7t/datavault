@@ -257,7 +257,7 @@ func TestRemoveDelegationKeyByDelegationKeyItself(t *testing.T) {
 	reqRemove := &backuppbv1.RemoveDelegationKeyRequest{
 		Username: "alice", GatewayCn: "backup-web-01",
 		DelegationPubkey: delPubKeyLine,
-		Nonce: nonceBytes2, Signature: signPayload(delSigner, removalPayload),
+		Nonce:            nonceBytes2, Signature: signPayload(delSigner, removalPayload),
 	}
 	_, err := srv.RemoveDelegationKey(ctx, reqRemove)
 	if err != nil {
@@ -314,7 +314,7 @@ func TestRemoveDelegationKeyByPrimaryKey(t *testing.T) {
 	reqRemove := &backuppbv1.RemoveDelegationKeyRequest{
 		Username: "alice", GatewayCn: "backup-web-01",
 		DelegationPubkey: delPubKeyLine,
-		Nonce: nonceBytes2, Signature: signPayload(primarySigner, removalPayload),
+		Nonce:            nonceBytes2, Signature: signPayload(primarySigner, removalPayload),
 	}
 	_, err := srv.RemoveDelegationKey(ctx, reqRemove)
 	if err != nil {
@@ -375,7 +375,7 @@ func TestRemoveDelegationKeyRejectsUnrelatedKey(t *testing.T) {
 	reqRemove := &backuppbv1.RemoveDelegationKeyRequest{
 		Username: "alice", GatewayCn: "backup-web-01",
 		DelegationPubkey: delPubKeyLine,
-		Nonce: nonceBytes2, Signature: signPayload(unrelatedSigner, removalPayload),
+		Nonce:            nonceBytes2, Signature: signPayload(unrelatedSigner, removalPayload),
 	}
 	_, err := srv.RemoveDelegationKey(ctx, reqRemove)
 	if status.Code(err) != codes.Unauthenticated {

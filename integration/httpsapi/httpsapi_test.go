@@ -29,13 +29,13 @@ import (
 
 	"github.com/example/datavault/internal/agent/httpsapi"
 	"github.com/example/datavault/internal/server/middleware"
+	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"github.com/example/datavault/pkg/auth"
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/pki"
 	"github.com/example/datavault/pkg/rules"
 	"github.com/example/datavault/pkg/store"
-	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -460,10 +460,10 @@ func TestUnallowlistedGatewayRejected(t *testing.T) {
 		t.Fatalf("CreateCA: %v", err)
 	}
 	srvCertPEM, srvKeyPEM, err := pki.Issue(caCertPEM, caKeyPEM, pki.IssueOptions{
-		CommonName: serverHost,
-		DNSNames:   []string{"localhost"},
+		CommonName:  serverHost,
+		DNSNames:    []string{"localhost"},
 		IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1)},
-		Server:     true,
+		Server:      true,
 	})
 	if err != nil {
 		t.Fatalf("Issue server cert: %v", err)

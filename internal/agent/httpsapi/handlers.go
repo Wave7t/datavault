@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
+	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"github.com/example/datavault/pkg/rules"
 	"github.com/example/datavault/pkg/store"
-	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 )
 
 const maxBodyBytes = 64 << 10

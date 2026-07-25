@@ -14,10 +14,10 @@ import (
 	"net/http"
 	"time"
 
+	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/rules"
 	"github.com/example/datavault/pkg/tlsconfig"
-	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"golang.org/x/crypto/ssh"
 )
 

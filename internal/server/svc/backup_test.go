@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/example/datavault/internal/server/middleware"
-	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 	"github.com/example/datavault/pkg/auth"
+	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 	"github.com/example/datavault/pkg/store"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc/codes"

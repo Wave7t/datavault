@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
+	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/rules"
 	"github.com/example/datavault/pkg/store"
-	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 )
 
 // makeRequest builds an authenticated request for the current OS user with a
