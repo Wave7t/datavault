@@ -14,18 +14,21 @@ import (
 	"flag"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/example/datavault/internal/agent/httpsapi"
 	"github.com/example/datavault/internal/agent/orchestrator"
 	"github.com/example/datavault/internal/agent/pool"
 	"github.com/example/datavault/internal/agent/scheduler"
 	"github.com/example/datavault/internal/agent/svc"
 	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
 	"github.com/example/datavault/pkg/auth"
+	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
 	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/hooks"
 	"github.com/example/datavault/pkg/rules"
@@ -58,6 +61,9 @@ func main() {
 	}
 	if err := store.MigrateTasks(db); err != nil {
 		log.Fatalf("migrate tasks: %v", err)
+	}
+	if err := store.MigrateWebDelegations(db); err != nil {
+		log.Fatalf("migrate web delegations: %v", err)
 	}
 	if err := store.FailIncompleteTasks(db, "agent restarted before task completed"); err != nil {
 		log.Fatalf("finalize interrupted tasks: %v", err)
@@ -184,6 +190,47 @@ func main() {
 				Server:    server,
 			}, nil
 		},
+		RegisterDelegationKeyFn: func(server, username, gatewayCN, delegationPubKey string, expiresAt int64, nonce, signature []byte) error {
+			entry, err := orch.ResolveServer(server)
+			if err != nil {
+				return err
+			}
+			client, err := connPool.GetClientWithServerName(entry.Address, entry.TLSServerName)
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_, err = client.RegisterDelegationKey(ctx, &backuppbv1.RegisterDelegationKeyRequest{
+				Username:         username,
+				GatewayCn:        gatewayCN,
+				DelegationPubkey: delegationPubKey,
+				ExpiresAt:        expiresAt,
+				Nonce:            nonce,
+				Signature:        signature,
+			})
+			return err
+		},
+		RemoveDelegationKeyFn: func(server, username, gatewayCN, delegationPubKey string, nonce, signature []byte) error {
+			entry, err := orch.ResolveServer(server)
+			if err != nil {
+				return err
+			}
+			client, err := connPool.GetClientWithServerName(entry.Address, entry.TLSServerName)
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_, err = client.RemoveDelegationKey(ctx, &backuppbv1.RemoveDelegationKeyRequest{
+				Username:         username,
+				GatewayCn:        gatewayCN,
+				DelegationPubkey: delegationPubKey,
+				Nonce:            nonce,
+				Signature:        signature,
+			})
+			return err
+		},
 	}
 
 	// Remove stale socket file and create the listening socket.
@@ -209,6 +256,45 @@ func main() {
 	srv := grpc.NewServer()
 	agentpbv1.RegisterAgentServiceServer(srv, agentSvc)
 
+	// Optional HTTPS gateway API. Starts only when https_api is configured.
+	httpSrv, err := startHTTPSAPI(cfg, httpsapi.Deps{
+		Cfg:                cfg,
+		DB:                 db,
+		UserRuleStore:      userRuleStore,
+		GetAuthChallengeFn: agentSvc.GetAuthChallengeFn,
+		GetStatusFn:        agentSvc.GetStatusFn,
+		GetQuotaUsageFn:    agentSvc.GetQuotaUsageFn,
+		RequestRestoreFn:   agentSvc.RequestRestoreFn,
+		RunSyncWithTaskKeyFn: func(username, ruleName string, taskKey ssh.Signer) (string, error) {
+			return orch.RunSyncWithTaskKey(username, ruleName, taskKey)
+		},
+		RegisterTaskGrantFn: func(server, username, method, ephemeralPubKey string, expiresAt int64, nonce, signature []byte) error {
+			entry, err := orch.ResolveServer(server)
+			if err != nil {
+				return err
+			}
+			client, err := connPool.GetClientWithServerName(entry.Address, entry.TLSServerName)
+			if err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_, err = client.RegisterTaskGrant(ctx, &backuppbv1.RegisterTaskGrantRequest{
+				Username:        username,
+				Method:          method,
+				EphemeralPubkey: ephemeralPubKey,
+				ExpiresAt:       expiresAt,
+				Nonce:           nonce,
+				Signature:       signature,
+			})
+			return err
+		},
+		RemoveDelegationKeyFn: agentSvc.RemoveDelegationKeyFn,
+	})
+	if err != nil {
+		log.Fatalf("init https api: %v", err)
+	}
+
 	// Signal handling: SIGHUP reloads config, SIGTERM/SIGINT graceful shutdown.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
@@ -229,6 +315,11 @@ func main() {
 				log.Println("config reloaded successfully")
 			case syscall.SIGTERM, syscall.SIGINT:
 				log.Printf("received %v, shutting down gracefully...", sig)
+				if httpSrv != nil {
+					shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					_ = httpSrv.Shutdown(shutCtx)
+					cancel()
+				}
 				srv.GracefulStop()
 				return
 			}
@@ -249,4 +340,26 @@ func quotaWarningReached(used, quota, percent int64) bool {
 	remainder := quota % 100
 	threshold := whole*percent + (remainder*percent+99)/100
 	return used >= threshold
+}
+
+// startHTTPSAPI starts the optional HTTPS gateway listener. It returns
+// (nil, nil) when https_api is not configured, leaving the agent exactly as
+// it behaves without the feature. On success the listener is already serving
+// in a background goroutine; the returned server's Shutdown must be wired into
+// the agent's graceful-shutdown path.
+func startHTTPSAPI(cfg *config.AgentConfig, deps httpsapi.Deps) (*httpsapi.Server, error) {
+	if cfg.HTTPSAPI == nil {
+		return nil, nil
+	}
+	srv, err := httpsapi.NewServer(deps)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		log.Printf("datavault-agent https api listening on %s", cfg.HTTPSAPI.Listen)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("https api serve: %v", err)
+		}
+	}()
+	return srv, nil
 }

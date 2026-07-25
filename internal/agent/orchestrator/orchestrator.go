@@ -461,7 +461,7 @@ func (o *Orchestrator) runRestoreTask(taskID, username string, uid uint32, targe
 		o.markFailed(taskID, username, "", tracker, fmt.Errorf("no backup servers configured"))
 		return
 	}
-	server, err := o.resolveServer(requestedServer)
+	server, err := o.ResolveServer(requestedServer)
 	if err != nil {
 		o.markFailed(taskID, username, requestedServer, tracker, err)
 		return
@@ -520,7 +520,7 @@ func (o *Orchestrator) GetAuthChallenge() (server string, challenge *backuppbv1.
 }
 
 func (o *Orchestrator) GetQuotaUsage(username, requestedServer string, nonce, signature []byte) (*backuppbv1.QuotaUsage, error) {
-	server, err := o.resolveServer(requestedServer)
+	server, err := o.ResolveServer(requestedServer)
 	if err != nil {
 		return nil, err
 	}
@@ -546,11 +546,11 @@ func (o *Orchestrator) GetQuotaUsage(username, requestedServer string, nonce, si
 	}, nil
 }
 
-// resolveServer only accepts a configured server from the loaded Agent configuration.
+// ResolveServer only accepts a configured server from the loaded Agent configuration.
 // The CLI echoes the address that issued its nonce; accepting arbitrary input
 // here would let an untrusted local peer redirect the root Agent to a server
 // outside the configured mTLS policy.
-func (o *Orchestrator) resolveServer(requested string) (config.ServerEntry, error) {
+func (o *Orchestrator) ResolveServer(requested string) (config.ServerEntry, error) {
 	if requested == "" {
 		return config.ServerEntry{}, fmt.Errorf("server selected by authentication challenge is required")
 	}
