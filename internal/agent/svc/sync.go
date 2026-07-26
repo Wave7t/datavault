@@ -11,7 +11,7 @@ import (
 
 // TriggerSync triggers a backup sync for the specified rule (or all rules if empty).
 func (s *AgentService) TriggerSync(ctx context.Context, req *agentpbv1.TriggerSyncRequest) (*agentpbv1.TriggerSyncResponse, error) {
-	username, err := s.extractUsername(ctx)
+	ident, err := s.extractCallerIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -19,18 +19,14 @@ func (s *AgentService) TriggerSync(ctx context.Context, req *agentpbv1.TriggerSy
 	if s.TriggerSyncFn == nil {
 		return nil, status.Error(codes.Unimplemented, "sync orchestrator not configured")
 	}
-	uid, err := auth.GetPeerUIDFromContext(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Unauthenticated, "cannot determine peer user: %v", err)
-	}
 	if req.SshAuthSock == "" {
 		return nil, status.Error(codes.InvalidArgument, "SSH_AUTH_SOCK is required for user sync")
 	}
-	if err := auth.ValidateSSHAgentSocketForUser(req.SshAuthSock, uid); err != nil {
+	if err := auth.ValidateSSHAgentSocketForUser(req.SshAuthSock, ident.UID); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "validate SSH_AUTH_SOCK: %v", err)
 	}
 
-	taskID, err := s.TriggerSyncFn(username, req.RuleName, req.SshAuthSock, uid)
+	taskID, err := s.TriggerSyncFn(ident.Username, req.RuleName, req.SshAuthSock, ident.UID, ident.Groups)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "trigger sync: %v", err)
 	}

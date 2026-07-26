@@ -126,7 +126,7 @@ func main() {
 		DB:            db,
 		UserRuleStore: userRuleStore,
 		ConfigPath:    *configPath,
-		TriggerSyncFn: func(username, ruleName, sshAuthSock string, uid uint32) (string, error) {
+		TriggerSyncFn: func(username, ruleName, sshAuthSock string, uid uint32, groups []string) (string, error) {
 			return orch.RunSyncWithSigner(username, ruleName, func(payload []byte) ([]byte, *ssh.Signature, error) {
 				return auth.SignWithSSHAgentForUser(sshAuthSock, uid, payload)
 			})
@@ -156,10 +156,10 @@ func main() {
 				Error: failureReason,
 			}, nil
 		},
-		RequestRestoreFn: func(username string, uid uint32, targetPath, server string, nonce, signature []byte) (string, error) {
+		RequestRestoreFn: func(username string, uid uint32, groups []string, targetPath, server string, nonce, signature []byte) (string, error) {
 			return orch.RunRestore(username, uid, targetPath, server, nonce, signature)
 		},
-		GetQuotaUsageFn: func(username, server string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error) {
+		GetQuotaUsageFn: func(username, server string, uid uint32, groups []string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error) {
 			usage, err := orch.GetQuotaUsage(username, server, nonce, signature)
 			if err != nil {
 				return nil, err
@@ -190,7 +190,7 @@ func main() {
 				Server:    server,
 			}, nil
 		},
-		RegisterDelegationKeyFn: func(server, username, gatewayCN, delegationPubKey string, expiresAt int64, nonce, signature []byte) error {
+		RegisterDelegationKeyFn: func(server, username string, uid uint32, groups []string, gatewayCN, delegationPubKey string, expiresAt int64, nonce, signature []byte) error {
 			entry, err := orch.ResolveServer(server)
 			if err != nil {
 				return err
@@ -211,7 +211,7 @@ func main() {
 			})
 			return err
 		},
-		RemoveDelegationKeyFn: func(server, username, gatewayCN, delegationPubKey string, nonce, signature []byte) error {
+		RemoveDelegationKeyFn: func(server, username string, uid uint32, groups []string, gatewayCN, delegationPubKey string, nonce, signature []byte) error {
 			entry, err := orch.ResolveServer(server)
 			if err != nil {
 				return err
@@ -263,8 +263,12 @@ func main() {
 		UserRuleStore:      userRuleStore,
 		GetAuthChallengeFn: agentSvc.GetAuthChallengeFn,
 		GetStatusFn:        agentSvc.GetStatusFn,
-		GetQuotaUsageFn:    agentSvc.GetQuotaUsageFn,
-		RequestRestoreFn:   agentSvc.RequestRestoreFn,
+		GetQuotaUsageFn: func(username, server string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error) {
+			return agentSvc.GetQuotaUsageFn(username, server, 0, nil, nonce, signature)
+		},
+		RequestRestoreFn: func(username string, uid uint32, targetPath, server string, nonce, signature []byte) (string, error) {
+			return agentSvc.RequestRestoreFn(username, uid, nil, targetPath, server, nonce, signature)
+		},
 		RunSyncWithTaskKeyFn: func(username, ruleName string, taskKey ssh.Signer) (string, error) {
 			return orch.RunSyncWithTaskKey(username, ruleName, taskKey)
 		},
@@ -289,7 +293,9 @@ func main() {
 			})
 			return err
 		},
-		RemoveDelegationKeyFn: agentSvc.RemoveDelegationKeyFn,
+		RemoveDelegationKeyFn: func(server, username, gatewayCN, delegationPubKey string, nonce, signature []byte) error {
+			return agentSvc.RemoveDelegationKeyFn(server, username, 0, nil, gatewayCN, delegationPubKey, nonce, signature)
+		},
 	})
 	if err != nil {
 		log.Fatalf("init https api: %v", err)

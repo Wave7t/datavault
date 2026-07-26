@@ -65,7 +65,7 @@ func TestEnrollWebDelegationValidatesAndForwards(t *testing.T) {
 			},
 		},
 		DB: db,
-		RegisterDelegationKeyFn: func(server, username, gatewayCN, delegationPubKey string, expiresAt int64, nonce, signature []byte) error {
+		RegisterDelegationKeyFn: func(server, username string, uid uint32, groups []string, gatewayCN, delegationPubKey string, expiresAt int64, nonce, signature []byte) error {
 			hookCalled = true
 			hookServer = server
 			hookUsername = username
@@ -175,7 +175,7 @@ func TestEnrollWebDelegationValidatesAndForwards(t *testing.T) {
 	}
 
 	// Negative: hook returns error -> no local row (rollback)
-	service.RegisterDelegationKeyFn = func(_, _, _, _ string, _ int64, _, _ []byte) error {
+	service.RegisterDelegationKeyFn = func(_ string, _ string, _ uint32, _ []string, _, _ string, _ int64, _, _ []byte) error {
 		return assertAnError
 	}
 	_, err = service.EnrollWebDelegation(ctx, &agentpbv1.EnrollWebDelegationRequest{
@@ -257,7 +257,7 @@ func TestRevokeWebDelegationLocalEvenWhenServerFails(t *testing.T) {
 			},
 		},
 		DB: db,
-		RemoveDelegationKeyFn: func(_, _, _, _ string, _, _ []byte) error {
+		RemoveDelegationKeyFn: func(_, _ string, _ uint32, _ []string, _, _ string, _, _ []byte) error {
 			return assertAnError
 		},
 	}

@@ -20,7 +20,7 @@ func TestTriggerSyncForwardsCallerSSHAgentSocket(t *testing.T) {
 	}
 	defer listener.Close()
 	called := false
-	service := &AgentService{TriggerSyncFn: func(username, ruleName, sshAuthSock string, uid uint32) (string, error) {
+	service := &AgentService{TriggerSyncFn: func(username, ruleName, sshAuthSock string, uid uint32, groups []string) (string, error) {
 		called = true
 		if username == "" || ruleName != "only-this-rule" || sshAuthSock != socketPath || uid != uint32(os.Getuid()) {
 			t.Fatalf("unexpected trigger arguments: user=%q rule=%q socket=%q uid=%d", username, ruleName, sshAuthSock, uid)
@@ -42,7 +42,7 @@ func TestTriggerSyncForwardsCallerSSHAgentSocket(t *testing.T) {
 
 func TestTriggerSyncRequiresCallerSSHAgentSocket(t *testing.T) {
 	ctx := auth.ContextWithPeerUID(context.Background(), uint32(os.Getuid()))
-	service := &AgentService{TriggerSyncFn: func(string, string, string, uint32) (string, error) {
+	service := &AgentService{TriggerSyncFn: func(string, string, string, uint32, []string) (string, error) {
 		t.Fatal("sync hook should not be called without SSH agent socket")
 		return "", nil
 	}}
@@ -53,7 +53,7 @@ func TestTriggerSyncRequiresCallerSSHAgentSocket(t *testing.T) {
 
 func TestTriggerSyncRejectsInvalidCallerSSHAgentSocket(t *testing.T) {
 	ctx := auth.ContextWithPeerUID(context.Background(), uint32(os.Getuid()))
-	service := &AgentService{TriggerSyncFn: func(string, string, string, uint32) (string, error) {
+	service := &AgentService{TriggerSyncFn: func(string, string, string, uint32, []string) (string, error) {
 		t.Fatal("sync hook should not be called with an invalid SSH agent socket")
 		return "", nil
 	}}

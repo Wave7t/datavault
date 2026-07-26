@@ -15,7 +15,7 @@ import (
 // behalf. The Server is updated first (it holds the consent signature as
 // proof); the local record is written only after Server success.
 func (s *AgentService) EnrollWebDelegation(ctx context.Context, req *agentpbv1.EnrollWebDelegationRequest) (*agentpbv1.EnrollWebDelegationResponse, error) {
-	username, err := s.extractUsername(ctx)
+	ident, err := s.extractCallerIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -36,11 +36,11 @@ func (s *AgentService) EnrollWebDelegation(ctx context.Context, req *agentpbv1.E
 		return nil, status.Error(codes.Unimplemented, "delegation registration not configured")
 	}
 	expiresAt := time.Now().Add(time.Duration(req.TtlSeconds) * time.Second).Unix()
-	if err := s.RegisterDelegationKeyFn(req.Server, username, req.GatewayCn, req.DelegationPubkey, expiresAt, req.Nonce, req.Signature); err != nil {
+	if err := s.RegisterDelegationKeyFn(req.Server, ident.Username, ident.UID, ident.Groups, req.GatewayCn, req.DelegationPubkey, expiresAt, req.Nonce, req.Signature); err != nil {
 		return nil, status.Errorf(codes.Internal, "register delegation key at server: %v", err)
 	}
 	if err := store.UpsertWebDelegation(s.DB, store.WebDelegation{
-		Username:         username,
+		Username:         ident.Username,
 		GatewayCN:        req.GatewayCn,
 		DelegationPubKey: req.DelegationPubkey,
 		ExpiresAt:        time.Unix(expiresAt, 0),
@@ -56,11 +56,11 @@ func (s *AgentService) EnrollWebDelegation(ctx context.Context, req *agentpbv1.E
 // delegation expires at the Server on its own, and operators can remove the
 // key file manually during incident response).
 func (s *AgentService) RevokeWebDelegation(ctx context.Context, req *agentpbv1.RevokeWebDelegationRequest) (*agentpbv1.RevokeWebDelegationResponse, error) {
-	username, err := s.extractUsername(ctx)
+	ident, err := s.extractCallerIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
-	d, err := store.GetWebDelegation(s.DB, username, req.GatewayCn)
+	d, err := store.GetWebDelegation(s.DB, ident.Username, req.GatewayCn)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "load delegation: %v", err)
 	}
@@ -69,9 +69,9 @@ func (s *AgentService) RevokeWebDelegation(ctx context.Context, req *agentpbv1.R
 	}
 	if s.RemoveDelegationKeyFn != nil {
 		// Best effort: failure is logged by the caller (CLI prints a warning).
-		_ = s.RemoveDelegationKeyFn(req.Server, username, req.GatewayCn, d.DelegationPubKey, req.Nonce, req.Signature)
+		_ = s.RemoveDelegationKeyFn(req.Server, ident.Username, ident.UID, ident.Groups, req.GatewayCn, d.DelegationPubKey, req.Nonce, req.Signature)
 	}
-	if err := store.RevokeWebDelegation(s.DB, username, req.GatewayCn); err != nil {
+	if err := store.RevokeWebDelegation(s.DB, ident.Username, req.GatewayCn); err != nil {
 		return nil, status.Errorf(codes.Internal, "revoke delegation: %v", err)
 	}
 	return &agentpbv1.RevokeWebDelegationResponse{}, nil

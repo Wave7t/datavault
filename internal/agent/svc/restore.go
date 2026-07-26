@@ -4,27 +4,22 @@ import (
 	"context"
 
 	agentpbv1 "github.com/example/datavault/pkg/agentpb/v1"
-	"github.com/example/datavault/pkg/auth"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 // RequestRestore initiates a restore operation to the specified target path.
 func (s *AgentService) RequestRestore(ctx context.Context, req *agentpbv1.RequestRestoreRequest) (*agentpbv1.RequestRestoreResponse, error) {
-	username, err := s.extractUsername(ctx)
+	ident, err := s.extractCallerIdentity(ctx)
 	if err != nil {
 		return nil, err
-	}
-	uid, err := auth.GetPeerUIDFromContext(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Unauthenticated, "cannot determine peer user: %v", err)
 	}
 
 	if s.RequestRestoreFn == nil {
 		return nil, status.Error(codes.Unimplemented, "restore orchestrator not configured")
 	}
 
-	taskID, err := s.RequestRestoreFn(username, uid, req.TargetPath, req.Server, req.Nonce, req.Signature)
+	taskID, err := s.RequestRestoreFn(ident.Username, ident.UID, ident.Groups, req.TargetPath, req.Server, req.Nonce, req.Signature)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "request restore: %v", err)
 	}

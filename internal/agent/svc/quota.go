@@ -9,14 +9,14 @@ import (
 )
 
 func (s *AgentService) GetQuotaUsage(ctx context.Context, req *agentpbv1.GetQuotaUsageRequest) (*agentpbv1.QuotaUsage, error) {
-	username, err := s.extractUsername(ctx)
+	ident, err := s.extractCallerIdentity(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if s.GetQuotaUsageFn == nil {
 		return nil, status.Error(codes.Unimplemented, "quota orchestrator not configured")
 	}
-	usage, err := s.GetQuotaUsageFn(username, req.Server, req.Nonce, req.Signature)
+	usage, err := s.GetQuotaUsageFn(ident.Username, req.Server, ident.UID, ident.Groups, req.Nonce, req.Signature)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "get quota usage: %v", err)
 	}

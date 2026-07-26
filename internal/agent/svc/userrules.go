@@ -12,18 +12,29 @@ import (
 	"github.com/example/datavault/pkg/rules"
 )
 
-// extractUsername determines the calling user's username from SO_PEERCRED.
-func (s *AgentService) extractUsername(ctx context.Context) (string, error) {
+// extractCallerIdentity resolves the calling Unix user's UID, username, and
+// supplementary groups. groupReadFailures are non-fatal: a request without
+// groups can still be authorized by min_uid-only trust policies.
+func (s *AgentService) extractCallerIdentity(ctx context.Context) (auth.CallerIdentity, error) {
 	uid, err := auth.GetPeerUIDFromContext(ctx)
 	if err != nil {
-		return "", status.Errorf(codes.Unauthenticated, "cannot determine peer user: %v", err)
+		return auth.CallerIdentity{}, status.Errorf(codes.Unauthenticated, "cannot determine peer user: %v", err)
 	}
-
-	username, err := auth.LookupUsername(uid)
+	// Groups were captured at peerCredListener.Accept time. If unavailable
+	// (e.g., test path that bypassed the listener), proceed with no groups;
+	// min_uid-only trust policies still work, group-based policies will deny.
+	groups, _ := auth.GroupsFromContext(ctx)
+	ident, err := auth.LookupCallerIdentity(uid, groups)
 	if err != nil {
-		return "", status.Errorf(codes.Unauthenticated, "cannot lookup peer user: %v", err)
+		return auth.CallerIdentity{}, status.Errorf(codes.Unauthenticated, "lookup caller: %v", err)
 	}
-	return username, nil
+	return ident, nil
+}
+
+// extractUsername determines the calling user's username from SO_PEERCRED.
+func (s *AgentService) extractUsername(ctx context.Context) (string, error) {
+	ident, err := s.extractCallerIdentity(ctx)
+	return ident.Username, err
 }
 
 // AddUserRule adds a new backup rule for the calling user.

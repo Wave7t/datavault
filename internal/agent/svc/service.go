@@ -29,7 +29,7 @@ type AgentService struct {
 	// TriggerSyncFn is called to start a sync for a given user and rule using
 	// that user's validated SSH-agent socket. An empty ruleName means "all
 	// rules". Returns a task ID.
-	TriggerSyncFn func(username, ruleName, sshAuthSock string, uid uint32) (string, error)
+	TriggerSyncFn func(username, ruleName, sshAuthSock string, uid uint32, groups []string) (string, error)
 
 	// GetStatusFn returns the current sync status for a task owned by username.
 	// An empty taskID means "latest task".
@@ -37,17 +37,17 @@ type AgentService struct {
 
 	// RequestRestoreFn initiates a restore for the given user to targetPath.
 	// An empty targetPath means ~/restored/. Returns a task ID.
-	RequestRestoreFn func(username string, uid uint32, targetPath, server string, nonce, signature []byte) (string, error)
+	RequestRestoreFn func(username string, uid uint32, groups []string, targetPath, server string, nonce, signature []byte) (string, error)
 
 	// GetQuotaUsageFn returns quota usage for the calling user.
-	GetQuotaUsageFn func(username, server string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error)
+	GetQuotaUsageFn func(username, server string, uid uint32, groups []string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error)
 
 	// GetAuthChallengeFn returns a server challenge for CLI-side SSH signing.
 	GetAuthChallengeFn func() (*agentpbv1.AuthChallenge, error)
 
 	// RegisterDelegationKeyFn forwards a delegation enrollment to the server.
-	RegisterDelegationKeyFn func(server, username, gatewayCN, delegationPubKey string, expiresAt int64, nonce, signature []byte) error
+	RegisterDelegationKeyFn func(server, username string, uid uint32, groups []string, gatewayCN, delegationPubKey string, expiresAt int64, nonce, signature []byte) error
 
 	// RemoveDelegationKeyFn forwards a delegation revocation to the server.
-	RemoveDelegationKeyFn func(server, username, gatewayCN, delegationPubKey string, nonce, signature []byte) error
+	RemoveDelegationKeyFn func(server, username string, uid uint32, groups []string, gatewayCN, delegationPubKey string, nonce, signature []byte) error
 }
