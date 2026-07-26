@@ -14,6 +14,9 @@
 # Build
 /dist/
 
+# Local git worktrees for isolated development
+/.worktrees/
+
 # Local Superpowers planning workspace
 /docs/superpowers/
 
