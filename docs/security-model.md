@@ -108,6 +108,54 @@ quota, and restore RPCs require this signature; administrative configuration
 and machine-rule work instead rely on the authenticated Agent and operator
 configuration.
 
+### Host-vouched mode
+
+`host_vouched` is an opt-in alternative to the per-user SSH-signature path
+above. It drops per-user key enrollment in favour of trusting the Agent host
+to assert the caller's identity. The Agent captures the caller UID from
+`SO_PEERCRED` and reads the caller's supplementary groups from
+`/proc/<pid>/status` at socket-accept time, then forwards both as gRPC
+metadata. The Server applies a per-Agent trust policy before accepting the
+asserted identity.
+
+**Threat-model tradeoff.** host_vouched trades weaker defence against a
+compromised Agent for simpler operations. In the default mode the Server holds
+a per-user public key, so a compromised Agent root can relay signed requests
+but cannot forge a user who never presented a key. Under host_vouched a
+compromised Agent root can forge user operations for *any* local user on that
+host — including users who have never used datavault — by injecting arbitrary
+metadata. The mode is appropriate when the primary threat is *misuse* (a user
+accidentally touching another user's data) rather than an *active adversary*
+on the Agent host. Where Agent compromise is a serious concern, keep the
+default `per_user_key`.
+
+**Trust evaluation.** A host_vouched request is allowed only when the Agent CN
+appears in both `allowed_hosts` and `user_auth.agents`. The per-Agent
+`TrustPolicy` is then evaluated against the asserted UID, username, and groups
+with this precedence:
+
+1. `exclude` — an explicit deny that wins regardless of any other field;
+2. `include` — an explicit allow that bypasses `min_uid` and `groups`;
+3. `min_uid` AND `groups` — the caller's UID must meet the threshold, and when
+   `groups` is set the caller must also be a member of at least one listed
+   group.
+
+Capabilities (`backup`, `quota`, `restore`, `delegation`) are
+administrator-configured per-Agent; an entry grants only the listed
+capabilities and there are no implicit defaults. Methods outside the granted
+set fall back to the per-user-key path, and `GetChallenge` and
+`GetGlobalConfig` remain mTLS-only regardless of mode.
+
+**What stays the same.** The Agent-to-Server mTLS channel, the `allowed_hosts`
+hostname allowlist, the machine-rule path, and the Web gateway delegation
+model are all unchanged. host_vouched only replaces the *user-proof* step for
+the Agents and capabilities it explicitly lists.
+
+**Audit field.** Each user operation logs an `auth_method` value:
+`auth_method=host_vouched` for a request accepted under this mode,
+`auth_method=ssh_signature` for a request that took the default signed path.
+Incident responders can distinguish the two by grepping Server logs.
+
 ### Web gateway delegations
 
 When the optional HTTPS API is enabled (see the [deployment guide](deployment.md#web-gateway-integration-optional)),

@@ -219,6 +219,90 @@ for that same user's historical backups. Require strong SSH authentication
 exclude system accounts, and disable the OS account promptly when it is no
 longer trusted.
 
+## Host-vouched user authentication
+
+Host-vouched mode (see [Security model: Host-vouched mode](security-model.md#host-vouched-mode))
+lets the Agent host assert caller identities instead of requiring every user
+to enroll an SSH public key. It is an opt-in per-Agent alternative to the
+default `per_user_key` mode covered in [OS-account key enrollment](#os-account-key-enrollment).
+
+Use it when all of the following hold:
+
+- a small trusted team operates the Agents, and the operators are themselves
+  the users;
+- the threat model is *misuse* (a user accidentally touching another user's
+  data) rather than an *active adversary* on an Agent host; and
+- per-user key enrollment is operationally burdensome relative to the risk.
+
+Do **not** use it where a compromised Agent root is a serious concern: under
+host_vouched such an attacker can forge operations for any local user on the
+host, including users who have never used datavault.
+
+### Configuration
+
+`user_auth.default_mode` stays `per_user_key` for existing deployments; opt in
+per-Agent by listing it under `user_auth.agents`. Each entry must reference an
+Agent CN that already appears in `allowed_hosts`, must declare a non-empty
+`trust` policy, and must declare an explicit `capabilities` list.
+
+```yaml
+user_auth:
+  default_mode: per_user_key    # default; existing deployments unchanged
+
+  agents:
+    # UID threshold only — simplest config
+    - agent: web-01
+      mode: host_vouched
+      trust:
+        min_uid: 1000
+      capabilities: [backup, quota]
+
+    # Unix group-based — integrates with LDAP/FreeIPA groups
+    - agent: build-01
+      mode: host_vouched
+      trust:
+        min_uid: 1000
+        groups: [backupusers]
+      capabilities: [backup, quota, restore]
+
+    # Mixed: allow a service account by name, plus groups for everyone else
+    - agent: app-01
+      mode: host_vouched
+      trust:
+        min_uid: 1000
+        groups: [operators]
+        include: [service]      # bypasses min_uid/groups for this user
+        exclude: [guest]        # hard-deny even if otherwise trusted
+      capabilities: [backup, quota, restore, delegation]
+```
+
+Trust evaluation precedence is `exclude` > `include` > (`min_uid` AND
+`groups`). When `min_uid` is omitted under `host_vouched` it defaults to
+`1000`. `groups`, when present, requires the caller to be a member of at least
+one listed group; omit `groups` to accept any UID that meets `min_uid`.
+
+### Migration
+
+Existing deployments need no change: `default_mode: per_user_key` keeps every
+Agent on the per-user-key path when no `agents` entry names it. A mixed fleet
+is supported by setting `mode: per_user_key` on selected entries and
+`mode: host_vouched` on others. `trust` and `capabilities` are honoured only
+for `host_vouched` entries; a `per_user_key` entry ignores them and behaves as
+before.
+
+### Operations notes
+
+- Supplementary groups are read fresh per request from
+  `/proc/<pid>/status` at Agent accept time; they are not cached, so
+  `usermod -aG` takes effect on the next request without an Agent restart.
+- Group-name resolution uses NSS (cgo) via `os/user.LookupGroupId`, so the
+  Agent host must be able to resolve the configured group names through its
+  NSS sources (local files, LDAP, FreeIPA, sssd, etc.). This matches the
+  existing `os/user.LookupId` behaviour for the caller UID.
+- An Agent entry takes effect only when both `allowed_hosts` and
+  `user_auth.agents` permit the Agent CN; remove the entry (or set its mode
+  to `per_user_key`) to revert that host immediately.
+
 ## Agent configuration
 
 The default path is `/etc/datavault/agent/config.yaml`.
