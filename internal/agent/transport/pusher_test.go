@@ -411,10 +411,12 @@ func TestPushBackupAttachesCallerMetadata(t *testing.T) {
 	}
 }
 
-// TestPushBackupOmitsMetadataForMachineBackups verifies that machine backups
-// (UID=0, no groups) do not attach caller metadata, since they have no user
-// identity to forward.
-func TestPushBackupOmitsMetadataForMachineBackups(t *testing.T) {
+// TestPushBackupAttachesMetadataForMachineBackups verifies that machine backups
+// (UID=0, no groups) still attach caller metadata with x-caller-uid: 0,
+// matching the orchestrator contract. The Server treats a missing header the
+// same as uid=0/empty-groups, so attaching unconditionally is harmless and
+// avoids an inconsistency between the orchestrator and pusher paths.
+func TestPushBackupAttachesMetadataForMachineBackups(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "config.yaml"), []byte("config"), 0644); err != nil {
 		t.Fatal(err)
@@ -434,9 +436,14 @@ func TestPushBackupOmitsMetadataForMachineBackups(t *testing.T) {
 	if client.lastPushCtx == nil {
 		t.Fatal("PushBackup stream was never created")
 	}
-	if md, ok := metadata.FromOutgoingContext(client.lastPushCtx); ok {
-		if len(md.Get("x-caller-uid")) != 0 {
-			t.Fatalf("machine backup should not attach x-caller-uid, got %v", md.Get("x-caller-uid"))
-		}
+	md, ok := metadata.FromOutgoingContext(client.lastPushCtx)
+	if !ok {
+		t.Fatal("expected outgoing metadata on PushBackup stream ctx")
+	}
+	if got := md.Get("x-caller-uid"); len(got) != 1 || got[0] != "0" {
+		t.Fatalf("x-caller-uid = %v, want [\"0\"]", got)
+	}
+	if got := md.Get("x-caller-groups"); len(got) != 0 {
+		t.Fatalf("x-caller-groups = %v, want none for empty groups", got)
 	}
 }

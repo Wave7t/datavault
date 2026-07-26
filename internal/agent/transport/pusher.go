@@ -45,7 +45,9 @@ type PushConfig struct {
 	// UID and Groups identify the calling Unix user. They are attached to
 	// every outbound RPC in this push as x-caller-uid / x-caller-groups
 	// metadata so the Server's host_vouched auth path can authorize the
-	// operation. Zero/nil (machine backups) leaves the metadata unset.
+	// operation. Always attached; the Server treats a missing header the
+	// same as uid=0/empty-groups, so attaching even for machine operations
+	// is harmless (matches orchestrator.CallerMeta).
 	UID    uint32
 	Groups []string
 }
@@ -97,11 +99,10 @@ func PushBackup(ctx context.Context, cfg PushConfig, diffs []scanner.FileDiff) e
 	if err := validatePushConfig(cfg); err != nil {
 		return err
 	}
-	// Attach caller identity to every outbound RPC in this push. Skipped for
-	// machine backups (uid=0, no groups) where the metadata would be noise.
-	if cfg.UID != 0 || len(cfg.Groups) > 0 {
-		ctx = metadata.NewOutgoingContext(ctx, callerMeta(cfg.UID, cfg.Groups))
-	}
+	// Attach caller identity to every outbound RPC in this push. The Server
+	// treats a missing header the same as uid=0/empty-groups, so attaching
+	// even for machine operations is harmless (matches orchestrator.CallerMeta).
+	ctx = metadata.NewOutgoingContext(ctx, callerMeta(cfg.UID, cfg.Groups))
 	batches, err := packager.PackBatchesWithinSize(diffs, packager.DefaultBatchSize, packager.MaxBatchContentBytes)
 	if err != nil {
 		return fmt.Errorf("pack batches: %w", err)
