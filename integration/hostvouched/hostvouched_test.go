@@ -18,6 +18,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -63,10 +64,19 @@ func (f *fakeZFS) CreateRestoreClone(string) (string, string, error) {
 func (f *fakeZFS) DestroyRestoreClone(string) error { return nil }
 
 // newHarness generates a private CA + server cert + agent cert, wires up a
-// BackupServer configured for host_vouched, starts it on a bufconn listener,
-// and returns a connected gRPC client. The Receiver's mount point and KeysDir
-// both live under t.TempDir(). All resources are cleaned up via t.Cleanup.
+// BackupServer configured for host_vouched (trust policy: MinUID 1000), starts
+// it on a bufconn listener, and returns a connected gRPC client. The
+// Receiver's mount point and KeysDir both live under t.TempDir(). All
+// resources are cleaned up via t.Cleanup.
 func newHarness(t *testing.T, zfs *fakeZFS) backuppbv1.BackupServiceClient {
+	return newHarnessWithTrust(t, zfs, config.TrustPolicy{MinUID: 1000})
+}
+
+// newHarnessWithTrust is like newHarness but lets the caller pin a custom
+// TrustPolicy on the agent entry. Needed to exercise group-based trust: the
+// default MinUID-only policy short-circuits in trustEvaluate before groups are
+// inspected, so it cannot detect a regression in x-caller-groups wiring.
+func newHarnessWithTrust(t *testing.T, zfs *fakeZFS, trust config.TrustPolicy) backuppbv1.BackupServiceClient {
 	t.Helper()
 
 	// --- Private PKI (CA + server cert + agent cert) ---
@@ -108,7 +118,7 @@ func newHarness(t *testing.T, zfs *fakeZFS) backuppbv1.BackupServiceClient {
 		t.Fatal("failed to add CA cert to pool")
 	}
 
-	// --- Config: one agent in host_vouched mode, trust min_uid 1000 ---
+	// --- Config: one agent in host_vouched mode, caller-supplied trust ---
 	cfg := &config.ServerConfig{
 		Server:       config.ServerBlock{BackupPool: "tank"},
 		AllowedHosts: []config.AllowedHost{{CN: agentCN}},
@@ -117,7 +127,7 @@ func newHarness(t *testing.T, zfs *fakeZFS) backuppbv1.BackupServiceClient {
 			Agents: []config.UserAuthAgentEntry{{
 				Agent:        agentCN,
 				Mode:         "host_vouched",
-				Trust:        config.TrustPolicy{MinUID: 1000},
+				Trust:        trust,
 				Capabilities: []string{"backup", "quota"},
 			}},
 		},
@@ -192,9 +202,22 @@ func newHarness(t *testing.T, zfs *fakeZFS) backuppbv1.BackupServiceClient {
 // callerCtx returns a context carrying x-caller-uid and x-caller-groups
 // metadata, exactly as a real datavault agent attaches on the wire.
 func callerCtx(uid string) context.Context {
+	return callerCtxWithGroups(uid, "backupusers")
+}
+
+// callerCtxWithGroups returns a context carrying x-caller-uid and an
+// x-caller-groups header set to the comma-joined groups. When no groups are
+// supplied the x-caller-groups header is omitted entirely, matching the wire
+// behavior of a caller with no supplementary groups.
+func callerCtxWithGroups(uid string, groups ...string) context.Context {
+	if len(groups) == 0 {
+		return metadata.AppendToOutgoingContext(context.Background(),
+			"x-caller-uid", uid,
+		)
+	}
 	return metadata.AppendToOutgoingContext(context.Background(),
 		"x-caller-uid", uid,
-		"x-caller-groups", "backupusers",
+		"x-caller-groups", strings.Join(groups, ","),
 	)
 }
 
@@ -284,4 +307,50 @@ func TestHostVouched_PushBackup_DeniesLowUID(t *testing.T) {
 	if _, err := stream.Recv(); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("expected PermissionDenied for low UID, got %v", err)
 	}
+}
+
+// TestHostVouched_GetQuotaUsage_GroupTrust exercises group-based trust
+// end-to-end. The server config requires membership in "backupusers"; only a
+// caller whose x-caller-groups header actually reaches DecideAuth (via the
+// interceptor's ctxCallerGroups stash) is allowed.
+//
+// The other tests in this suite use a MinUID-only config, under which
+// trustEvaluate short-circuits at len(p.Groups)==0 and never inspects groups.
+// Those tests therefore cannot detect a regression that drops the
+// ctxCallerGroups stash — this one can.
+func TestHostVouched_GetQuotaUsage_GroupTrust(t *testing.T) {
+	trust := config.TrustPolicy{MinUID: 1000, Groups: []string{"backupusers"}}
+
+	// Allow: caller claims a matching group → request succeeds with no
+	// signature. If the interceptor stops stashing x-caller-groups into
+	// context, DecideAuth sees groups=nil and trustEvaluate returns false →
+	// this subtest fails with PermissionDenied.
+	t.Run("Allow_WithMatchingGroup", func(t *testing.T) {
+		client := newHarnessWithTrust(t, &fakeZFS{usedBytes: 42}, trust)
+
+		ctx, cancel := context.WithTimeout(callerCtxWithGroups("1020", "backupusers"), 5*time.Second)
+		defer cancel()
+		resp, err := client.GetQuotaUsage(ctx, &backuppbv1.GetQuotaUsageRequest{Username: "alice"})
+		if err != nil {
+			t.Fatalf("expected allow with matching group, got %v", err)
+		}
+		if resp.UsedBytes != 42 {
+			t.Fatalf("UsedBytes = %d, want 42", resp.UsedBytes)
+		}
+	})
+
+	// Deny: caller claims a non-matching group → PermissionDenied. This
+	// confirms the header is not only received but actually consulted: with
+	// the stash intact, groups=["everyone"] is rejected; a regression that
+	// silently treated any group as trusted would fail here.
+	t.Run("Deny_WithNonMatchingGroup", func(t *testing.T) {
+		client := newHarnessWithTrust(t, &fakeZFS{usedBytes: 42}, trust)
+
+		ctx, cancel := context.WithTimeout(callerCtxWithGroups("1020", "everyone"), 5*time.Second)
+		defer cancel()
+		_, err := client.GetQuotaUsage(ctx, &backuppbv1.GetQuotaUsageRequest{Username: "alice"})
+		if status.Code(err) != codes.PermissionDenied {
+			t.Fatalf("expected PermissionDenied for non-matching group, got %v", err)
+		}
+	})
 }
