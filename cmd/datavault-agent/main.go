@@ -35,6 +35,7 @@ import (
 	"github.com/example/datavault/pkg/store"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 func main() {
@@ -129,7 +130,7 @@ func main() {
 		TriggerSyncFn: func(username, ruleName, sshAuthSock string, uid uint32, groups []string) (string, error) {
 			return orch.RunSyncWithSigner(username, ruleName, func(payload []byte) ([]byte, *ssh.Signature, error) {
 				return auth.SignWithSSHAgentForUser(sshAuthSock, uid, payload)
-			})
+			}, uid, groups)
 		},
 		GetStatusFn: func(username, taskID string) (*agentpbv1.SyncStatusUpdate, error) {
 			tracker, err := orch.GetTrackerForUser(username, taskID)
@@ -157,10 +158,10 @@ func main() {
 			}, nil
 		},
 		RequestRestoreFn: func(username string, uid uint32, groups []string, targetPath, server string, nonce, signature []byte) (string, error) {
-			return orch.RunRestore(username, uid, targetPath, server, nonce, signature)
+			return orch.RunRestore(username, uid, groups, targetPath, server, nonce, signature)
 		},
 		GetQuotaUsageFn: func(username, server string, uid uint32, groups []string, nonce, signature []byte) (*agentpbv1.QuotaUsage, error) {
-			usage, err := orch.GetQuotaUsage(username, server, nonce, signature)
+			usage, err := orch.GetQuotaUsage(username, server, uid, groups, nonce, signature)
 			if err != nil {
 				return nil, err
 			}
@@ -199,7 +200,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(context.Background(), orchestrator.CallerMeta(uid, groups)), 30*time.Second)
 			defer cancel()
 			_, err = client.RegisterDelegationKey(ctx, &backuppbv1.RegisterDelegationKeyRequest{
 				Username:         username,
@@ -220,7 +221,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(metadata.NewOutgoingContext(context.Background(), orchestrator.CallerMeta(uid, groups)), 30*time.Second)
 			defer cancel()
 			_, err = client.RemoveDelegationKey(ctx, &backuppbv1.RemoveDelegationKeyRequest{
 				Username:         username,
@@ -270,7 +271,7 @@ func main() {
 			return agentSvc.RequestRestoreFn(username, uid, nil, targetPath, server, nonce, signature)
 		},
 		RunSyncWithTaskKeyFn: func(username, ruleName string, taskKey ssh.Signer) (string, error) {
-			return orch.RunSyncWithTaskKey(username, ruleName, taskKey)
+			return orch.RunSyncWithTaskKey(username, ruleName, taskKey, 0, nil)
 		},
 		RegisterTaskGrantFn: func(server, username, method, ephemeralPubKey string, expiresAt int64, nonce, signature []byte) error {
 			entry, err := orch.ResolveServer(server)

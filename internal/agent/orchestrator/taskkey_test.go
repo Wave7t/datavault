@@ -224,7 +224,7 @@ func TestRunSyncWithTaskKeyUsesEphemeralSigner(t *testing.T) {
 	// Inject the fake client into the pool's cache so no real dial occurs.
 	connPool.SetClientForTest("server:8443\x00", client)
 
-	taskID, err := orch.RunSyncWithTaskKey("alice", "", signer)
+	taskID, err := orch.RunSyncWithTaskKey("alice", "", signer, 1020, []string{"g1", "g2"})
 	if err != nil {
 		t.Fatalf("RunSyncWithTaskKey: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestRunSyncWithTaskKeyRejectsNilKey(t *testing.T) {
 		Servers: []config.ServerEntry{{Address: "server:8443"}},
 	}
 	orch := New(cfg, nil, nil, nil)
-	if _, err := orch.RunSyncWithTaskKey("alice", "", nil); err == nil {
+	if _, err := orch.RunSyncWithTaskKey("alice", "", nil, 0, nil); err == nil {
 		t.Fatal("expected RunSyncWithTaskKey with nil key to fail")
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/example/datavault/pkg/scanner"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -40,6 +42,23 @@ type PushConfig struct {
 	// BandwidthLimitBytesPerSecond limits upload payloads for this attempt.
 	// Zero leaves transfers unlimited.
 	BandwidthLimitBytesPerSecond int64
+	// UID and Groups identify the calling Unix user. They are attached to
+	// every outbound RPC in this push as x-caller-uid / x-caller-groups
+	// metadata so the Server's host_vouched auth path can authorize the
+	// operation. Zero/nil (machine backups) leaves the metadata unset.
+	UID    uint32
+	Groups []string
+}
+
+// callerMeta converts a caller identity to gRPC metadata for outbound calls.
+// Mirrors orchestrator.CallerMeta; duplicated here to avoid an import cycle
+// (orchestrator imports transport).
+func callerMeta(uid uint32, groups []string) metadata.MD {
+	md := metadata.Pairs("x-caller-uid", strconv.FormatUint(uint64(uid), 10))
+	if len(groups) > 0 {
+		md.Append("x-caller-groups", strings.Join(groups, ","))
+	}
+	return md
 }
 
 type bandwidthLimiter struct {
@@ -77,6 +96,11 @@ func PushBackup(ctx context.Context, cfg PushConfig, diffs []scanner.FileDiff) e
 	}
 	if err := validatePushConfig(cfg); err != nil {
 		return err
+	}
+	// Attach caller identity to every outbound RPC in this push. Skipped for
+	// machine backups (uid=0, no groups) where the metadata would be noise.
+	if cfg.UID != 0 || len(cfg.Groups) > 0 {
+		ctx = metadata.NewOutgoingContext(ctx, callerMeta(cfg.UID, cfg.Groups))
 	}
 	batches, err := packager.PackBatchesWithinSize(diffs, packager.DefaultBatchSize, packager.MaxBatchContentBytes)
 	if err != nil {

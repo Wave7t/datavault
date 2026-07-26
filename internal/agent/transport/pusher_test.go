@@ -16,12 +16,14 @@ import (
 	"github.com/example/datavault/pkg/scanner"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
 
 type fakeBackupClient struct {
 	stream         *fakePushStream
 	challengeCalls int
+	lastPushCtx    context.Context
 }
 
 func (c *fakeBackupClient) GetChallenge(ctx context.Context, in *backuppbv1.GetChallengeRequest, opts ...grpc.CallOption) (*backuppbv1.Challenge, error) {
@@ -34,6 +36,7 @@ func (c *fakeBackupClient) GetGlobalConfig(ctx context.Context, in *backuppbv1.G
 }
 
 func (c *fakeBackupClient) PushBackup(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[backuppbv1.BackupBatch, backuppbv1.BatchAck], error) {
+	c.lastPushCtx = ctx
 	return c.stream, nil
 }
 
@@ -363,5 +366,77 @@ func TestBandwidthLimiterReservesPayloadTime(t *testing.T) {
 	limiter.wait(50)
 	if len(sleeps) != 2 || sleeps[0] != time.Second || sleeps[1] != 500*time.Millisecond {
 		t.Fatalf("bandwidth waits=%v, want [1s 500ms]", sleeps)
+	}
+
+}
+
+// TestPushBackupAttachesCallerMetadata verifies that when PushConfig carries a
+// caller identity, PushBackup attaches x-caller-uid / x-caller-groups metadata
+// to the outbound stream-creation context (and the GetChallenge context that
+// precedes it).
+func TestPushBackupAttachesCallerMetadata(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("alpha"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stream := &fakePushStream{}
+	client := &fakeBackupClient{stream: stream}
+	err := PushBackup(context.Background(), PushConfig{
+		Client:   client,
+		Username: "alice",
+		RuleType: "user",
+		RootPath: root,
+		UID:      1020,
+		Groups:   []string{"g1", "g2"},
+		SignFunc: func(payload []byte) ([]byte, *ssh.Signature, error) {
+			return nil, &ssh.Signature{Format: "ssh-rsa", Blob: []byte("sig")}, nil
+		},
+	}, []scanner.FileDiff{{Action: scanner.DiffAdd, File: scanner.FileInfo{Path: "a.txt", Mode: 0644}}})
+	if err != nil {
+		t.Fatalf("PushBackup: %v", err)
+	}
+	if client.lastPushCtx == nil {
+		t.Fatal("PushBackup stream was never created")
+	}
+	md, ok := metadata.FromOutgoingContext(client.lastPushCtx)
+	if !ok {
+		t.Fatal("expected outgoing metadata on PushBackup stream ctx")
+	}
+	if got := md.Get("x-caller-uid"); len(got) != 1 || got[0] != "1020" {
+		t.Fatalf("x-caller-uid = %v, want [\"1020\"]", got)
+	}
+	if got := md.Get("x-caller-groups"); len(got) != 1 || got[0] != "g1,g2" {
+		t.Fatalf("x-caller-groups = %v, want [\"g1,g2\"]", got)
+	}
+}
+
+// TestPushBackupOmitsMetadataForMachineBackups verifies that machine backups
+// (UID=0, no groups) do not attach caller metadata, since they have no user
+// identity to forward.
+func TestPushBackupOmitsMetadataForMachineBackups(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "config.yaml"), []byte("config"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stream := &fakePushStream{}
+	client := &fakeBackupClient{stream: stream}
+	err := PushBackup(context.Background(), PushConfig{
+		Client:   client,
+		Username: "_machine",
+		RuleType: "machine",
+		RootPath: root,
+	}, []scanner.FileDiff{{Action: scanner.DiffAdd, File: scanner.FileInfo{Path: "config.yaml", Mode: 0644}}})
+	if err != nil {
+		t.Fatalf("PushBackup: %v", err)
+	}
+	if client.lastPushCtx == nil {
+		t.Fatal("PushBackup stream was never created")
+	}
+	if md, ok := metadata.FromOutgoingContext(client.lastPushCtx); ok {
+		if len(md.Get("x-caller-uid")) != 0 {
+			t.Fatalf("machine backup should not attach x-caller-uid, got %v", md.Get("x-caller-uid"))
+		}
 	}
 }

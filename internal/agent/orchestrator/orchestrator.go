@@ -30,6 +30,7 @@ import (
 	"github.com/example/datavault/pkg/scanner"
 	"github.com/example/datavault/pkg/store"
 	"golang.org/x/crypto/ssh"
+	"google.golang.org/grpc/metadata"
 )
 
 // Orchestrator coordinates backup sync operations across multiple servers.
@@ -53,6 +54,28 @@ var lookupUserHome = userHomeDir
 var userLookup = user.Lookup
 
 const machineUsername = "_machine"
+
+// CallerMeta converts a caller identity (Unix UID + supplementary group
+// names) into gRPC metadata for outbound calls to the Server. The Server's
+// host_vouched auth path reads these headers to authorize per-user
+// operations; the per_user_key auth path ignores them.
+//
+// Always attach for user-initiated operations. The Server treats a missing
+// header the same as uid=0/empty-groups, so attaching even for machine
+// operations is harmless.
+func CallerMeta(uid uint32, groups []string) metadata.MD {
+	md := metadata.Pairs("x-caller-uid", strconv.FormatUint(uint64(uid), 10))
+	if len(groups) > 0 {
+		md.Append("x-caller-groups", strings.Join(groups, ","))
+	}
+	return md
+}
+
+// withCallerMeta returns ctx with the caller-identity metadata attached for
+// the next outbound RPC.
+func withCallerMeta(ctx context.Context, uid uint32, groups []string) context.Context {
+	return metadata.NewOutgoingContext(ctx, CallerMeta(uid, groups))
+}
 
 // New creates a new Orchestrator with the given configuration, connection
 // pool, database handle, and rule store.
@@ -117,20 +140,23 @@ func generateTaskID(prefix, username string) (string, error) {
 // An optional ruleName filter can restrict the sync to a single named rule;
 // pass an empty string to sync all rules.
 func (o *Orchestrator) RunSync(username, ruleName string) (string, error) {
-	return o.runSync(username, ruleName, nil, nil)
+	return o.runSync(username, ruleName, nil, nil, 0, nil)
 }
 
 // RunSyncWithSigner runs a user sync using a caller-owned SSH-agent signer.
 // The signer is intentionally supplied by the Unix-socket service rather
-// than inherited from the root Agent environment.
-func (o *Orchestrator) RunSyncWithSigner(username, ruleName string, signFunc func([]byte) ([]byte, *ssh.Signature, error)) (string, error) {
-	return o.runSync(username, ruleName, signFunc, nil)
+// than inherited from the root Agent environment. uid and groups are
+// attached to every outbound Server RPC as x-caller-uid / x-caller-groups
+// metadata so the host_vouched auth path can authorize the operation.
+func (o *Orchestrator) RunSyncWithSigner(username, ruleName string, signFunc func([]byte) ([]byte, *ssh.Signature, error), uid uint32, groups []string) (string, error) {
+	return o.runSync(username, ruleName, signFunc, nil, uid, groups)
 }
 
 // RunSyncWithTaskKey runs a user sync signed by an ephemeral task key that
 // has been authorized at the Server via a task grant (see
-// RegisterTaskGrant). The key never leaves process memory.
-func (o *Orchestrator) RunSyncWithTaskKey(username, ruleName string, taskKey ssh.Signer) (string, error) {
+// RegisterTaskGrant). The key never leaves process memory. uid and groups
+// are attached as outbound metadata for the host_vouched auth path.
+func (o *Orchestrator) RunSyncWithTaskKey(username, ruleName string, taskKey ssh.Signer, uid uint32, groups []string) (string, error) {
 	if taskKey == nil {
 		return "", fmt.Errorf("task key is required")
 	}
@@ -141,10 +167,10 @@ func (o *Orchestrator) RunSyncWithTaskKey(username, ruleName string, taskKey ssh
 			return nil, nil, err
 		}
 		return pub, sig, nil
-	}, pub)
+	}, pub, uid, groups)
 }
 
-func (o *Orchestrator) runSync(username, ruleName string, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte) (string, error) {
+func (o *Orchestrator) runSync(username, ruleName string, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte, uid uint32, groups []string) (string, error) {
 	if o == nil || o.Cfg == nil || len(o.Cfg.Servers) == 0 {
 		return "", fmt.Errorf("no backup servers configured")
 	}
@@ -198,7 +224,7 @@ func (o *Orchestrator) runSync(username, ruleName string, signFunc func([]byte) 
 		wg.Add(1)
 		go func(server config.ServerEntry) {
 			defer wg.Done()
-			o.syncToServerWithRetry(server, username, ruleName, userRules, tracker, taskID, signFunc, signerPubKey)
+			o.syncToServerWithRetry(server, username, ruleName, userRules, tracker, taskID, signFunc, signerPubKey, uid, groups)
 		}(srv)
 	}
 
@@ -216,7 +242,7 @@ func (o *Orchestrator) runSync(username, ruleName string, signFunc func([]byte) 
 	return taskID, nil
 }
 
-func (o *Orchestrator) syncToServerWithRetry(server config.ServerEntry, username, ruleName string, userRules []rules.Rule, tracker *progress.Tracker, taskID string, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte) {
+func (o *Orchestrator) syncToServerWithRetry(server config.ServerEntry, username, ruleName string, userRules []rules.Rule, tracker *progress.Tracker, taskID string, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte, uid uint32, groups []string) {
 	backoff := retry.New(retry.Config{
 		Initial:    o.Cfg.Retry.InitialInterval,
 		Max:        o.Cfg.Retry.MaxInterval,
@@ -225,7 +251,7 @@ func (o *Orchestrator) syncToServerWithRetry(server config.ServerEntry, username
 		MaxElapsed: o.Cfg.Retry.MaxElapsedTime,
 	})
 	for {
-		err := o.syncToServer(server, username, ruleName, userRules, tracker, signFunc, signerPubKey)
+		err := o.syncToServer(server, username, ruleName, userRules, tracker, signFunc, signerPubKey, uid, groups)
 		if err == nil {
 			return
 		}
@@ -245,7 +271,7 @@ func (o *Orchestrator) syncToServerWithRetry(server config.ServerEntry, username
 // syncToServer runs one complete sync attempt for a single server:
 // fetch global config -> merge rules -> scan paths -> compute diff -> push.
 // It returns a classified error so the caller can retry only transient faults.
-func (o *Orchestrator) syncToServer(server config.ServerEntry, username, ruleName string, userRules []rules.Rule, tracker *progress.Tracker, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte) error {
+func (o *Orchestrator) syncToServer(server config.ServerEntry, username, ruleName string, userRules []rules.Rule, tracker *progress.Tracker, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte, uid uint32, groups []string) error {
 	serverAddr := server.Address
 	client, err := o.Pool.GetClientWithServerName(serverAddr, server.TLSServerName)
 	if err != nil {
@@ -258,8 +284,9 @@ func (o *Orchestrator) syncToServer(server config.ServerEntry, username, ruleNam
 		ruleType = "machine"
 		syncRules = machineRulesFromConfig(o.Cfg.MachineRules, ruleName)
 	} else {
-		// Fetch global rules and user policy from the server.
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		// Fetch global rules and user policy from the server. Attach caller
+		// identity metadata so the host_vouched path can authorize the read.
+		ctx, cancel := context.WithTimeout(withCallerMeta(context.Background(), uid, groups), 30*time.Second)
 		gcfg, err := client.GetGlobalConfig(ctx, &backuppbv1.GetGlobalConfigRequest{})
 		cancel()
 		if err != nil {
@@ -336,7 +363,7 @@ func (o *Orchestrator) syncToServer(server config.ServerEntry, username, ruleNam
 	// only after a root's transfer succeeds.
 	tracker.SetPhase(progress.PhaseTransferring)
 	for _, batch := range batches {
-		if err := o.pushDiffsToServer(client, serverAddr, username, ruleType, batch.rootPath, batch.rootPrefix, batch.diffs, tracker, signFunc, signerPubKey); err != nil {
+		if err := o.pushDiffsToServer(client, serverAddr, username, ruleType, batch.rootPath, batch.rootPrefix, batch.diffs, tracker, signFunc, signerPubKey, uid, groups); err != nil {
 			return fmt.Errorf("push %q to %s: %w", batch.rootPath, serverAddr, err)
 		}
 
@@ -373,7 +400,7 @@ func (o *Orchestrator) updateSnapshots(serverAddr, username string, diffs []scan
 // pushDiffsToServer streams file diffs to the backup server via
 // BackupService.PushBackup. It reads file contents from disk and sends them
 // in batches. This is the core transfer step of the sync pipeline.
-func (o *Orchestrator) pushDiffsToServer(client backuppbv1.BackupServiceClient, serverAddr, username, ruleType, rootPath, rootPrefix string, diffs []scanner.FileDiff, tracker *progress.Tracker, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte) error {
+func (o *Orchestrator) pushDiffsToServer(client backuppbv1.BackupServiceClient, serverAddr, username, ruleType, rootPath, rootPrefix string, diffs []scanner.FileDiff, tracker *progress.Tracker, signFunc func([]byte) ([]byte, *ssh.Signature, error), signerPubKey []byte, uid uint32, groups []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	return transport.PushBackup(ctx, transport.PushConfig{
@@ -387,6 +414,8 @@ func (o *Orchestrator) pushDiffsToServer(client backuppbv1.BackupServiceClient, 
 		SignFunc:                     signFunc,
 		SignerPubKey:                 signerPubKey,
 		BandwidthLimitBytesPerSecond: o.Cfg.BandwidthLimitBytesPerSecond,
+		UID:                          uid,
+		Groups:                       groups,
 	}, diffs)
 }
 
@@ -424,8 +453,10 @@ func machineRulesFromConfig(machineRules []config.MachineRule, ruleName string) 
 }
 
 // RunRestore starts a full restore of the latest server-side backup into a
-// user-owned path under the user's home directory.
-func (o *Orchestrator) RunRestore(username string, uid uint32, targetPath, server string, nonce, signature []byte) (string, error) {
+// user-owned path under the user's home directory. groups is attached to the
+// outbound PullRestore RPC as x-caller-groups metadata for the host_vouched
+// auth path.
+func (o *Orchestrator) RunRestore(username string, uid uint32, groups []string, targetPath, server string, nonce, signature []byte) (string, error) {
 	taskID, err := generateTaskID("restore", username)
 	if err != nil {
 		return "", fmt.Errorf("generate task ID: %w", err)
@@ -450,11 +481,11 @@ func (o *Orchestrator) RunRestore(username string, uid uint32, targetPath, serve
 		return taskID, err
 	}
 
-	go o.runRestoreTask(taskID, username, uid, target, server, nonce, signature, tracker)
+	go o.runRestoreTask(taskID, username, uid, groups, target, server, nonce, signature, tracker)
 	return taskID, nil
 }
 
-func (o *Orchestrator) runRestoreTask(taskID, username string, uid uint32, targetPath, requestedServer string, nonce, signature []byte, tracker *progress.Tracker) {
+func (o *Orchestrator) runRestoreTask(taskID, username string, uid uint32, groups []string, targetPath, requestedServer string, nonce, signature []byte, tracker *progress.Tracker) {
 	tracker.SetPhase(progress.PhaseTransferring)
 
 	if len(o.Cfg.Servers) == 0 {
@@ -473,7 +504,7 @@ func (o *Orchestrator) runRestoreTask(taskID, username string, uid uint32, targe
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(withCallerMeta(context.Background(), uid, groups), 10*time.Minute)
 	defer cancel()
 
 	if len(nonce) == 0 || len(signature) == 0 {
@@ -519,7 +550,7 @@ func (o *Orchestrator) GetAuthChallenge() (server string, challenge *backuppbv1.
 	return "", nil, fmt.Errorf("get challenge from configured servers: %s", strings.Join(failures, "; "))
 }
 
-func (o *Orchestrator) GetQuotaUsage(username, requestedServer string, nonce, signature []byte) (*backuppbv1.QuotaUsage, error) {
+func (o *Orchestrator) GetQuotaUsage(username, requestedServer string, uid uint32, groups []string, nonce, signature []byte) (*backuppbv1.QuotaUsage, error) {
 	server, err := o.ResolveServer(requestedServer)
 	if err != nil {
 		return nil, err
@@ -532,7 +563,7 @@ func (o *Orchestrator) GetQuotaUsage(username, requestedServer string, nonce, si
 		return nil, fmt.Errorf("missing quota signature")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(withCallerMeta(context.Background(), uid, groups), 30*time.Second)
 	defer cancel()
 	req := &backuppbv1.GetQuotaUsageRequest{Username: username, Nonce: nonce, Signature: signature}
 	usage, err := client.GetQuotaUsage(ctx, req)
