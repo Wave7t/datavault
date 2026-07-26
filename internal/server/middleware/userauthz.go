@@ -10,8 +10,9 @@ import (
 type AuthDecision int
 
 const (
-	DecisionAllow AuthDecision = iota
-	DecisionRequireSig
+	// DecisionRequireSig is the zero value: safe default preserving per_user_key fallback semantics.
+	DecisionRequireSig AuthDecision = iota
+	DecisionAllow
 	DecisionDeny
 )
 
