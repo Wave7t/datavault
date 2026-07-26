@@ -73,6 +73,7 @@ type ServerConfig struct {
 	UserPolicy     UserPolicyBlock     `yaml:"user_policy"`
 	SnapshotPolicy SnapshotPolicyBlock `yaml:"snapshot_policy"`
 	KeyEnrollment  KeyEnrollmentPolicy `yaml:"key_enrollment"`
+	UserAuth       UserAuth            `yaml:"user_auth"`
 }
 
 func LoadServerConfig(path string) (*ServerConfig, error) {
@@ -149,6 +150,9 @@ func LoadServerConfig(path string) (*ServerConfig, error) {
 	if err := validateKeyEnrollmentPolicy(&cfg); err != nil {
 		return nil, err
 	}
+	if err := validateUserAuth(&cfg); err != nil {
+		return nil, err
+	}
 
 	return &cfg, nil
 }
@@ -191,4 +195,103 @@ func containsAllowedHost(hosts []AllowedHost, hostname string) bool {
 		}
 	}
 	return false
+}
+
+// UserAuth configures per-Agent user authentication mode. When an Agent's
+// mode is host_vouched, the Agent vouches for the identity of local users
+// backing up through it, subject to the nested TrustPolicy.
+type UserAuth struct {
+	DefaultMode string               `yaml:"default_mode"`
+	Agents      []UserAuthAgentEntry `yaml:"agents"`
+}
+
+type UserAuthAgentEntry struct {
+	Agent        string      `yaml:"agent"`
+	Mode         string      `yaml:"mode"`
+	Trust        TrustPolicy `yaml:"trust"`
+	Capabilities []string    `yaml:"capabilities"`
+}
+
+type TrustPolicy struct {
+	MinUID  int32    `yaml:"min_uid"`
+	Groups  []string `yaml:"groups"`
+	Include []string `yaml:"include"`
+	Exclude []string `yaml:"exclude"`
+}
+
+var validCapabilities = map[string]bool{
+	"backup": true, "quota": true, "restore": true, "delegation": true,
+}
+
+func (ua UserAuth) ModeForAgent(cn string) string {
+	for _, e := range ua.Agents {
+		if e.Agent == cn {
+			return e.Mode
+		}
+	}
+	return ua.DefaultMode
+}
+
+func (ua UserAuth) EntryForAgent(cn string) (UserAuthAgentEntry, bool) {
+	for _, e := range ua.Agents {
+		if e.Agent == cn {
+			return e, true
+		}
+	}
+	return UserAuthAgentEntry{}, false
+}
+
+func validateUserAuth(cfg *ServerConfig) error {
+	ua := &cfg.UserAuth
+	if ua.DefaultMode == "" {
+		ua.DefaultMode = "per_user_key"
+	}
+	switch ua.DefaultMode {
+	case "per_user_key", "host_vouched":
+	default:
+		return fmt.Errorf("user_auth.default_mode must be per_user_key or host_vouched")
+	}
+	for i, e := range ua.Agents {
+		if e.Agent == "" {
+			return fmt.Errorf("user_auth.agents[%d].agent is required", i)
+		}
+		if e.Mode != "host_vouched" && e.Mode != "per_user_key" {
+			return fmt.Errorf("user_auth.agents[%d].mode must be host_vouched or per_user_key", i)
+		}
+		if !containsAllowedHost(cfg.AllowedHosts, e.Agent) {
+			return fmt.Errorf("user_auth.agents[%d].agent %q is not in allowed_hosts", i, e.Agent)
+		}
+		if e.Mode == "host_vouched" {
+			if e.Trust.MinUID == 0 && len(e.Trust.Groups) == 0 && len(e.Trust.Include) == 0 {
+				return fmt.Errorf("user_auth.agents[%d].trust: host_vouched requires at least one of min_uid, groups, include", i)
+			}
+			if e.Trust.MinUID == 0 {
+				cfg.UserAuth.Agents[i].Trust.MinUID = 1000
+			}
+			if len(e.Capabilities) == 0 {
+				return fmt.Errorf("user_auth.agents[%d].capabilities is required for host_vouched", i)
+			}
+			for j, c := range e.Capabilities {
+				if !validCapabilities[c] {
+					return fmt.Errorf("user_auth.agents[%d].capabilities[%d]: unknown %q", i, j, c)
+				}
+			}
+		}
+		for j, g := range e.Trust.Groups {
+			if strings.TrimSpace(g) == "" {
+				return fmt.Errorf("user_auth.agents[%d].trust.groups[%d] must not be blank", i, j)
+			}
+		}
+		for j, name := range e.Trust.Include {
+			if err := zfs.ValidateUsername(name); err != nil {
+				return fmt.Errorf("user_auth.agents[%d].trust.include[%d]: %w", i, j, err)
+			}
+		}
+		for j, name := range e.Trust.Exclude {
+			if err := zfs.ValidateUsername(name); err != nil {
+				return fmt.Errorf("user_auth.agents[%d].trust.exclude[%d]: %w", i, j, err)
+			}
+		}
+	}
+	return nil
 }

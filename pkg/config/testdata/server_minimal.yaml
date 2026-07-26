@@ -1,0 +1,7 @@
+server:
+  cert_file: c
+  key_file: k
+  ca_file: a
+  backup_pool: tank
+allowed_hosts:
+  - cn: web-01
