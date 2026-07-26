@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/store"
@@ -25,8 +27,10 @@ import (
 type ctxKey string
 
 const (
-	ctxHostname ctxKey = "hostname"
-	ctxUsername ctxKey = "username"
+	ctxHostname     ctxKey = "hostname"
+	ctxUsername     ctxKey = "username"
+	ctxCallerUID    ctxKey = "caller_uid"
+	ctxCallerGroups ctxKey = "caller_groups"
 )
 
 // MethodWhitelist contains RPC methods that skip SSH signature verification.
@@ -61,6 +65,45 @@ func UsernameFromContext(ctx context.Context) string {
 	return v
 }
 
+// extractCallerMetadata parses x-caller-uid and x-caller-groups from gRPC
+// metadata. Returns (0, nil, nil) when the headers are absent — this means
+// the caller is on per_user_key path. Returns an error only on malformed input.
+func extractCallerMetadata(ctx context.Context) (uid int32, groups []string, err error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return 0, nil, nil
+	}
+	uidStr := getMeta(md, "x-caller-uid")
+	if uidStr == "" {
+		return 0, nil, nil
+	}
+	n, parseErr := strconv.ParseInt(uidStr, 10, 32)
+	if parseErr != nil {
+		return 0, nil, fmt.Errorf("invalid x-caller-uid %q: %w", uidStr, parseErr)
+	}
+	uid = int32(n)
+	if gstr := getMeta(md, "x-caller-groups"); gstr != "" {
+		for _, g := range strings.Split(gstr, ",") {
+			if g = strings.TrimSpace(g); g != "" {
+				groups = append(groups, g)
+			}
+		}
+	}
+	return uid, groups, nil
+}
+
+// CallerUIDFromContext extracts the caller UID stashed by the auth interceptor.
+func CallerUIDFromContext(ctx context.Context) (int32, bool) {
+	v, ok := ctx.Value(ctxCallerUID).(int32)
+	return v, ok
+}
+
+// CallerGroupsFromContext extracts the caller groups stashed by the auth interceptor.
+func CallerGroupsFromContext(ctx context.Context) ([]string, bool) {
+	v, ok := ctx.Value(ctxCallerGroups).([]string)
+	return v, ok
+}
+
 // LoadAuthorizedKey loads the SSH public key for a user on a host.
 // Keys are stored at keysDir/<hostname>/<username>.pub
 func LoadAuthorizedKey(keysDir, hostname, username string) (ssh.PublicKey, error) {
@@ -92,6 +135,13 @@ func AuthInterceptor(cfg *config.ServerConfig, db *sql.DB) grpc.UnaryServerInter
 		}
 		ctx = context.WithValue(ctx, ctxHostname, hostname)
 
+		uid, groups, cerr := extractCallerMetadata(ctx)
+		if cerr != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid caller metadata")
+		}
+		ctx = context.WithValue(ctx, ctxCallerUID, uid)
+		ctx = context.WithValue(ctx, ctxCallerGroups, groups)
+
 		// Whitelisted methods skip SSH signature / nonce verification
 		if MethodWhitelist[info.FullMethod] {
 			return handler(ctx, req)
@@ -120,6 +170,13 @@ func AuthStreamInterceptor(cfg *config.ServerConfig, db *sql.DB) grpc.StreamServ
 			return status.Errorf(codes.PermissionDenied, "hostname %q not allowed", hostname)
 		}
 		ctx := context.WithValue(ss.Context(), ctxHostname, hostname)
+
+		uid, groups, cerr := extractCallerMetadata(ctx)
+		if cerr != nil {
+			return status.Error(codes.InvalidArgument, "invalid caller metadata")
+		}
+		ctx = context.WithValue(ctx, ctxCallerUID, uid)
+		ctx = context.WithValue(ctx, ctxCallerGroups, groups)
 
 		// Whitelisted methods skip SSH signature / nonce verification
 		if MethodWhitelist[info.FullMethod] {
