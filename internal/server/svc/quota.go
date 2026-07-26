@@ -26,13 +26,30 @@ func (s *BackupServer) GetQuotaUsage(ctx context.Context, req *backuppbv1.GetQuo
 	if err := zfs.ValidateUsername(username); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid username: %v", err)
 	}
-	if err := s.verifyQuotaSignature(hostname, req); err != nil {
-		return nil, err
+	uid, _ := middleware.CallerUIDFromContext(ctx)
+	groups, _ := middleware.CallerGroupsFromContext(ctx)
+	const method = "/backup.v1.BackupService/GetQuotaUsage"
+	decision, derr := middleware.DecideAuth(s.Cfg, hostname, uid, username, groups, method)
+	if derr != nil {
+		LogAuthDecision(s.Logger, method, hostname, username, uid, middleware.DecisionDeny)
+		return nil, status.Error(codes.PermissionDenied, "authorization denied")
 	}
-	ok, err := store.ConsumeNonce(s.DB, hex.EncodeToString(req.Nonce))
-	if err != nil || !ok {
-		return nil, status.Error(codes.Unauthenticated, "invalid or expired nonce")
+	switch decision {
+	case middleware.DecisionDeny:
+		LogAuthDecision(s.Logger, method, hostname, username, uid, decision)
+		return nil, status.Error(codes.PermissionDenied, "authorization denied")
+	case middleware.DecisionRequireSig:
+		if err := s.verifyQuotaSignature(hostname, req); err != nil {
+			return nil, err
+		}
+		ok, err := store.ConsumeNonce(s.DB, hex.EncodeToString(req.Nonce))
+		if err != nil || !ok {
+			return nil, status.Error(codes.Unauthenticated, "invalid or expired nonce")
+		}
+	case middleware.DecisionAllow:
+		// host_vouched: signature and nonce consumption are skipped.
 	}
+	LogAuthDecision(s.Logger, method, hostname, username, uid, decision)
 
 	dsName := zfs.DatasetPath(s.Cfg.Server.BackupPool, hostname, username)
 	used, err := s.ZFS.GetUsed(dsName)

@@ -132,6 +132,7 @@ func runServer() {
 		ZFS:      zfsMgr,
 		KeysDir:  defaultAuthorizedKeysDir,
 		Receiver: recv,
+		Logger:   log.Default(),
 	}
 	backuppbv1.RegisterBackupServiceServer(srv, backupSvc)
 	healthSvc := health.NewServer()

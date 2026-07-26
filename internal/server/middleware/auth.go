@@ -104,6 +104,18 @@ func CallerGroupsFromContext(ctx context.Context) ([]string, bool) {
 	return v, ok
 }
 
+// ContextWithCallerUID returns a context with the caller UID set. Used by
+// tests to populate the value normally stashed by the auth interceptor.
+func ContextWithCallerUID(ctx context.Context, uid int32) context.Context {
+	return context.WithValue(ctx, ctxCallerUID, uid)
+}
+
+// ContextWithCallerGroups returns a context with the caller groups set. Used
+// by tests to populate the value normally stashed by the auth interceptor.
+func ContextWithCallerGroups(ctx context.Context, groups []string) context.Context {
+	return context.WithValue(ctx, ctxCallerGroups, groups)
+}
+
 // LoadAuthorizedKey loads the SSH public key for a user on a host.
 // Keys are stored at keysDir/<hostname>/<username>.pub
 func LoadAuthorizedKey(keysDir, hostname, username string) (ssh.PublicKey, error) {

@@ -14,6 +14,7 @@ import (
 	"github.com/example/datavault/internal/server/middleware"
 	"github.com/example/datavault/pkg/auth"
 	backuppbv1 "github.com/example/datavault/pkg/backuppb/v1"
+	"github.com/example/datavault/pkg/config"
 	"github.com/example/datavault/pkg/store"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc/codes"
@@ -35,7 +36,16 @@ func newTestServer(t *testing.T) (*BackupServer, context.Context, func()) {
 	}
 	ctx := middleware.ContextWithHostname(context.Background(), "agent-01")
 
+	// Default config: per_user_key mode with agent-01 allowed. DecideAuth
+	// returns DecisionRequireSig, preserving the signature-based behavior the
+	// existing handler tests were written against.
+	cfg := &config.ServerConfig{
+		AllowedHosts: []config.AllowedHost{{CN: "agent-01"}},
+		UserAuth:     config.UserAuth{DefaultMode: "per_user_key"},
+	}
+
 	srv := &BackupServer{
+		Cfg:     cfg,
 		DB:      db,
 		KeysDir: keysDir,
 	}

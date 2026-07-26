@@ -32,13 +32,30 @@ func (s *BackupServer) PullRestore(req *backuppbv1.PullRestoreRequest, stream ba
 	if err := zfs.ValidateUsername(username); err != nil {
 		return status.Errorf(codes.InvalidArgument, "invalid username: %v", err)
 	}
-	if err := s.verifyPullRestoreSignature(hostname, req); err != nil {
-		return err
+	uid, _ := middleware.CallerUIDFromContext(stream.Context())
+	groups, _ := middleware.CallerGroupsFromContext(stream.Context())
+	const method = "/backup.v1.BackupService/PullRestore"
+	decision, derr := middleware.DecideAuth(s.Cfg, hostname, uid, username, groups, method)
+	if derr != nil {
+		LogAuthDecision(s.Logger, method, hostname, username, uid, middleware.DecisionDeny)
+		return status.Error(codes.PermissionDenied, "authorization denied")
 	}
-	ok, err := store.ConsumeNonce(s.DB, hex.EncodeToString(req.Nonce))
-	if err != nil || !ok {
-		return status.Error(codes.Unauthenticated, "invalid or expired nonce")
+	switch decision {
+	case middleware.DecisionDeny:
+		LogAuthDecision(s.Logger, method, hostname, username, uid, decision)
+		return status.Error(codes.PermissionDenied, "authorization denied")
+	case middleware.DecisionRequireSig:
+		if err := s.verifyPullRestoreSignature(hostname, req); err != nil {
+			return err
+		}
+		ok, err := store.ConsumeNonce(s.DB, hex.EncodeToString(req.Nonce))
+		if err != nil || !ok {
+			return status.Error(codes.Unauthenticated, "invalid or expired nonce")
+		}
+	case middleware.DecisionAllow:
+		// host_vouched: signature and nonce consumption are skipped.
 	}
+	LogAuthDecision(s.Logger, method, hostname, username, uid, decision)
 
 	dsName := zfs.DatasetPath(s.Cfg.Server.BackupPool, hostname, username)
 	snapshot, err := s.ZFS.LatestSnapshot(dsName)

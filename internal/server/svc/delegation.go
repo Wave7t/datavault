@@ -50,21 +50,38 @@ func (s *BackupServer) RegisterDelegationKey(ctx context.Context, req *backuppbv
 	if _, _, _, _, err := ssh.ParseAuthorizedKey([]byte(req.DelegationPubkey)); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid delegation public key")
 	}
-	payload := auth.DelegationConsentPayload(req.Nonce, req.Username, req.GatewayCn, req.DelegationPubkey, req.ExpiresAt)
-	sig, err := parseSSHSignature(req.Signature)
-	if err != nil {
-		return nil, err
+	uid, _ := middleware.CallerUIDFromContext(ctx)
+	groups, _ := middleware.CallerGroupsFromContext(ctx)
+	const method = "/backup.v1.BackupService/RegisterDelegationKey"
+	decision, derr := middleware.DecideAuth(s.Cfg, hostname, uid, req.Username, groups, method)
+	if derr != nil {
+		LogAuthDecision(s.Logger, method, hostname, req.Username, uid, middleware.DecisionDeny)
+		return nil, status.Error(codes.PermissionDenied, "authorization denied")
 	}
-	primary, err := middleware.LoadAuthorizedKey(s.KeysDir, hostname, req.Username)
-	if err != nil {
-		return nil, status.Errorf(codes.Unauthenticated, "no authorized key for %s/%s", hostname, req.Username)
+	switch decision {
+	case middleware.DecisionDeny:
+		LogAuthDecision(s.Logger, method, hostname, req.Username, uid, decision)
+		return nil, status.Error(codes.PermissionDenied, "authorization denied")
+	case middleware.DecisionRequireSig:
+		payload := auth.DelegationConsentPayload(req.Nonce, req.Username, req.GatewayCn, req.DelegationPubkey, req.ExpiresAt)
+		sig, err := parseSSHSignature(req.Signature)
+		if err != nil {
+			return nil, err
+		}
+		primary, err := middleware.LoadAuthorizedKey(s.KeysDir, hostname, req.Username)
+		if err != nil {
+			return nil, status.Errorf(codes.Unauthenticated, "no authorized key for %s/%s", hostname, req.Username)
+		}
+		if err := primary.Verify(payload, sig); err != nil {
+			return nil, status.Errorf(codes.Unauthenticated, "consent signature verification failed: %v", err)
+		}
+		if err := consumeServerNonce(s.DB, req.Nonce); err != nil {
+			return nil, err
+		}
+	case middleware.DecisionAllow:
+		// host_vouched: signature and nonce consumption are skipped.
 	}
-	if err := primary.Verify(payload, sig); err != nil {
-		return nil, status.Errorf(codes.Unauthenticated, "consent signature verification failed: %v", err)
-	}
-	if err := consumeServerNonce(s.DB, req.Nonce); err != nil {
-		return nil, err
-	}
+	LogAuthDecision(s.Logger, method, hostname, req.Username, uid, decision)
 	meta := middleware.DelegationMeta{GatewayCN: req.GatewayCn, ExpiresAt: req.ExpiresAt}
 	if err := middleware.SaveDelegationKey(s.KeysDir, hostname, req.Username, req.DelegationPubkey, meta); err != nil {
 		return nil, status.Errorf(codes.Internal, "save delegation key: %v", err)
@@ -81,30 +98,47 @@ func (s *BackupServer) RemoveDelegationKey(ctx context.Context, req *backuppbv1.
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid delegation public key")
 	}
-	payload := auth.DelegationRemovalPayload(req.Nonce, req.Username, req.GatewayCn, req.DelegationPubkey)
-	sig, err := parseSSHSignature(req.Signature)
-	if err != nil {
-		return nil, err
+	uid, _ := middleware.CallerUIDFromContext(ctx)
+	groups, _ := middleware.CallerGroupsFromContext(ctx)
+	const method = "/backup.v1.BackupService/RemoveDelegationKey"
+	decision, derr := middleware.DecideAuth(s.Cfg, hostname, uid, req.Username, groups, method)
+	if derr != nil {
+		LogAuthDecision(s.Logger, method, hostname, req.Username, uid, middleware.DecisionDeny)
+		return nil, status.Error(codes.PermissionDenied, "authorization denied")
 	}
-
-	// Try primary key first
-	primary, primaryErr := middleware.LoadAuthorizedKey(s.KeysDir, hostname, req.Username)
-	verified := false
-	if primaryErr == nil && primary.Verify(payload, sig) == nil {
-		verified = true
-	}
-
-	// Then try the named delegation key itself
-	if !verified {
-		if delegationPub.Verify(payload, sig) != nil {
-			return nil, status.Error(codes.Unauthenticated, "removal signature verification failed")
+	switch decision {
+	case middleware.DecisionDeny:
+		LogAuthDecision(s.Logger, method, hostname, req.Username, uid, decision)
+		return nil, status.Error(codes.PermissionDenied, "authorization denied")
+	case middleware.DecisionRequireSig:
+		payload := auth.DelegationRemovalPayload(req.Nonce, req.Username, req.GatewayCn, req.DelegationPubkey)
+		sig, err := parseSSHSignature(req.Signature)
+		if err != nil {
+			return nil, err
 		}
-		verified = true
-	}
 
-	if err := consumeServerNonce(s.DB, req.Nonce); err != nil {
-		return nil, err
+		// Try primary key first
+		primary, primaryErr := middleware.LoadAuthorizedKey(s.KeysDir, hostname, req.Username)
+		verified := false
+		if primaryErr == nil && primary.Verify(payload, sig) == nil {
+			verified = true
+		}
+
+		// Then try the named delegation key itself
+		if !verified {
+			if delegationPub.Verify(payload, sig) != nil {
+				return nil, status.Error(codes.Unauthenticated, "removal signature verification failed")
+			}
+			verified = true
+		}
+
+		if err := consumeServerNonce(s.DB, req.Nonce); err != nil {
+			return nil, err
+		}
+	case middleware.DecisionAllow:
+		// host_vouched: signature and nonce consumption are skipped.
 	}
+	LogAuthDecision(s.Logger, method, hostname, req.Username, uid, decision)
 	fp := middleware.DelegationFingerprint(delegationPub)
 	if err := middleware.RemoveDelegationKeyFile(s.KeysDir, hostname, req.Username, fp); err != nil {
 		return nil, status.Errorf(codes.Internal, "remove delegation key: %v", err)
@@ -129,26 +163,43 @@ func (s *BackupServer) RegisterTaskGrant(ctx context.Context, req *backuppbv1.Re
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid ephemeral public key")
 	}
-	payload := auth.TaskGrantPayload(req.Nonce, req.Username, req.Method, req.EphemeralPubkey, req.ExpiresAt)
-	sig, err := parseSSHSignature(req.Signature)
-	if err != nil {
-		return nil, err
+	uid, _ := middleware.CallerUIDFromContext(ctx)
+	groups, _ := middleware.CallerGroupsFromContext(ctx)
+	const method = "/backup.v1.BackupService/RegisterTaskGrant"
+	decision, derr := middleware.DecideAuth(s.Cfg, hostname, uid, req.Username, groups, method)
+	if derr != nil {
+		LogAuthDecision(s.Logger, method, hostname, req.Username, uid, middleware.DecisionDeny)
+		return nil, status.Error(codes.PermissionDenied, "authorization denied")
 	}
+	switch decision {
+	case middleware.DecisionDeny:
+		LogAuthDecision(s.Logger, method, hostname, req.Username, uid, decision)
+		return nil, status.Error(codes.PermissionDenied, "authorization denied")
+	case middleware.DecisionRequireSig:
+		payload := auth.TaskGrantPayload(req.Nonce, req.Username, req.Method, req.EphemeralPubkey, req.ExpiresAt)
+		sig, err := parseSSHSignature(req.Signature)
+		if err != nil {
+			return nil, err
+		}
 
-	// Verify against unexpired delegation keys only — never the primary key
-	delegationKeys, err := middleware.LoadDelegationKeys(s.KeysDir, hostname, req.Username, now)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "load delegation keys: %v", err)
+		// Verify against unexpired delegation keys only — never the primary key
+		delegationKeys, err := middleware.LoadDelegationKeys(s.KeysDir, hostname, req.Username, now)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "load delegation keys: %v", err)
+		}
+		if len(delegationKeys) == 0 {
+			return nil, status.Error(codes.Unauthenticated, "no delegation keys found")
+		}
+		if !middleware.VerifyAnyKey(delegationKeys, payload, sig) {
+			return nil, status.Error(codes.Unauthenticated, "task grant signature verification failed")
+		}
+		if err := consumeServerNonce(s.DB, req.Nonce); err != nil {
+			return nil, err
+		}
+	case middleware.DecisionAllow:
+		// host_vouched: signature and nonce consumption are skipped.
 	}
-	if len(delegationKeys) == 0 {
-		return nil, status.Error(codes.Unauthenticated, "no delegation keys found")
-	}
-	if !middleware.VerifyAnyKey(delegationKeys, payload, sig) {
-		return nil, status.Error(codes.Unauthenticated, "task grant signature verification failed")
-	}
-	if err := consumeServerNonce(s.DB, req.Nonce); err != nil {
-		return nil, err
-	}
+	LogAuthDecision(s.Logger, method, hostname, req.Username, uid, decision)
 	grant := store.TaskGrant{
 		Hostname:             hostname,
 		Username:             req.Username,

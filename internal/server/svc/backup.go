@@ -38,10 +38,15 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 	ctx, cancel := context.WithTimeout(stream.Context(), maxStreamDuration)
 	defer cancel()
 
+	uid, _ := middleware.CallerUIDFromContext(stream.Context())
+	groups, _ := middleware.CallerGroupsFromContext(stream.Context())
+
 	var username string
 	var ruleType string
 	firstBatch := true
 	nonceConsumed := false
+	authDecisionChecked := false
+	authDecision := middleware.DecisionRequireSig // safe default
 	partialUploads := make(map[string]*partialUpload)
 	defer func() {
 		for _, upload := range partialUploads {
@@ -75,16 +80,37 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 		}
 
 		if batch.RuleType == "user" {
-			if err := s.verifyBatchSignature(hostname, batch); err != nil {
-				return err
-			}
-			if !nonceConsumed {
-				ok, err := store.ConsumeNonce(s.DB, hex.EncodeToString(batch.Nonce))
-				if err != nil || !ok {
-					return status.Error(codes.Unauthenticated, "invalid or expired nonce")
+			// DecideAuth is evaluated once per stream, on the first user batch.
+			// Machine rules skip auth entirely (existing behavior).
+			if !authDecisionChecked {
+				authDecisionChecked = true
+				const method = "/backup.v1.BackupService/PushBackup"
+				var derr error
+				authDecision, derr = middleware.DecideAuth(s.Cfg, hostname, uid, batch.Username, groups, method)
+				if derr != nil {
+					LogAuthDecision(s.Logger, method, hostname, batch.Username, uid, middleware.DecisionDeny)
+					return status.Error(codes.PermissionDenied, "authorization denied")
 				}
-				nonceConsumed = true
+				switch authDecision {
+				case middleware.DecisionDeny:
+					LogAuthDecision(s.Logger, method, hostname, batch.Username, uid, authDecision)
+					return status.Error(codes.PermissionDenied, "authorization denied")
+				}
+				LogAuthDecision(s.Logger, method, hostname, batch.Username, uid, authDecision)
 			}
+			if authDecision == middleware.DecisionRequireSig {
+				if err := s.verifyBatchSignature(hostname, batch); err != nil {
+					return err
+				}
+				if !nonceConsumed {
+					ok, err := store.ConsumeNonce(s.DB, hex.EncodeToString(batch.Nonce))
+					if err != nil || !ok {
+						return status.Error(codes.Unauthenticated, "invalid or expired nonce")
+					}
+					nonceConsumed = true
+				}
+			}
+			// DecisionAllow: skip both signature verification and nonce consumption.
 		}
 
 		// --- First-batch initialization: dataset and quota ---
