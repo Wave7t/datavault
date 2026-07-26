@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -149,6 +150,7 @@ func AuthInterceptor(cfg *config.ServerConfig, db *sql.DB) grpc.UnaryServerInter
 
 		uid, groups, cerr := extractCallerMetadata(ctx)
 		if cerr != nil {
+			log.Printf("invalid caller metadata from %s: %v", hostname, cerr)
 			return nil, status.Error(codes.InvalidArgument, "invalid caller metadata")
 		}
 		ctx = context.WithValue(ctx, ctxCallerUID, uid)
@@ -185,6 +187,7 @@ func AuthStreamInterceptor(cfg *config.ServerConfig, db *sql.DB) grpc.StreamServ
 
 		uid, groups, cerr := extractCallerMetadata(ctx)
 		if cerr != nil {
+			log.Printf("invalid caller metadata from %s: %v", hostname, cerr)
 			return status.Error(codes.InvalidArgument, "invalid caller metadata")
 		}
 		ctx = context.WithValue(ctx, ctxCallerUID, uid)

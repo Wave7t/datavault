@@ -88,6 +88,9 @@ func (s *BackupServer) PushBackup(stream backuppbv1.BackupService_PushBackupServ
 				var derr error
 				authDecision, derr = middleware.DecideAuth(s.Cfg, hostname, uid, batch.Username, groups, method)
 				if derr != nil {
+					if s.Logger != nil {
+						s.Logger.Printf("host_vouched deny %s %s[%d] on %s: %v", method, batch.Username, uid, hostname, derr)
+					}
 					LogAuthDecision(s.Logger, method, hostname, batch.Username, uid, middleware.DecisionDeny)
 					return status.Error(codes.PermissionDenied, "authorization denied")
 				}

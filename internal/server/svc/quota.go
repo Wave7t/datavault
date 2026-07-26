@@ -31,6 +31,9 @@ func (s *BackupServer) GetQuotaUsage(ctx context.Context, req *backuppbv1.GetQuo
 	const method = "/backup.v1.BackupService/GetQuotaUsage"
 	decision, derr := middleware.DecideAuth(s.Cfg, hostname, uid, username, groups, method)
 	if derr != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("host_vouched deny %s %s[%d] on %s: %v", method, username, uid, hostname, derr)
+		}
 		LogAuthDecision(s.Logger, method, hostname, username, uid, middleware.DecisionDeny)
 		return nil, status.Error(codes.PermissionDenied, "authorization denied")
 	}

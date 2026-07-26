@@ -37,6 +37,9 @@ func (s *BackupServer) PullRestore(req *backuppbv1.PullRestoreRequest, stream ba
 	const method = "/backup.v1.BackupService/PullRestore"
 	decision, derr := middleware.DecideAuth(s.Cfg, hostname, uid, username, groups, method)
 	if derr != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("host_vouched deny %s %s[%d] on %s: %v", method, username, uid, hostname, derr)
+		}
 		LogAuthDecision(s.Logger, method, hostname, username, uid, middleware.DecisionDeny)
 		return status.Error(codes.PermissionDenied, "authorization denied")
 	}

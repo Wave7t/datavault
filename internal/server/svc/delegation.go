@@ -55,6 +55,9 @@ func (s *BackupServer) RegisterDelegationKey(ctx context.Context, req *backuppbv
 	const method = "/backup.v1.BackupService/RegisterDelegationKey"
 	decision, derr := middleware.DecideAuth(s.Cfg, hostname, uid, req.Username, groups, method)
 	if derr != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("host_vouched deny %s %s[%d] on %s: %v", method, req.Username, uid, hostname, derr)
+		}
 		LogAuthDecision(s.Logger, method, hostname, req.Username, uid, middleware.DecisionDeny)
 		return nil, status.Error(codes.PermissionDenied, "authorization denied")
 	}
@@ -103,6 +106,9 @@ func (s *BackupServer) RemoveDelegationKey(ctx context.Context, req *backuppbv1.
 	const method = "/backup.v1.BackupService/RemoveDelegationKey"
 	decision, derr := middleware.DecideAuth(s.Cfg, hostname, uid, req.Username, groups, method)
 	if derr != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("host_vouched deny %s %s[%d] on %s: %v", method, req.Username, uid, hostname, derr)
+		}
 		LogAuthDecision(s.Logger, method, hostname, req.Username, uid, middleware.DecisionDeny)
 		return nil, status.Error(codes.PermissionDenied, "authorization denied")
 	}
@@ -168,6 +174,9 @@ func (s *BackupServer) RegisterTaskGrant(ctx context.Context, req *backuppbv1.Re
 	const method = "/backup.v1.BackupService/RegisterTaskGrant"
 	decision, derr := middleware.DecideAuth(s.Cfg, hostname, uid, req.Username, groups, method)
 	if derr != nil {
+		if s.Logger != nil {
+			s.Logger.Printf("host_vouched deny %s %s[%d] on %s: %v", method, req.Username, uid, hostname, derr)
+		}
 		LogAuthDecision(s.Logger, method, hostname, req.Username, uid, middleware.DecisionDeny)
 		return nil, status.Error(codes.PermissionDenied, "authorization denied")
 	}
